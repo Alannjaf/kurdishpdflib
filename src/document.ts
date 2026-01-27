@@ -38,7 +38,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     Pages: null as unknown as PdfRef,
   });
   w.addDict({
-    Producer: '(kurd-pdflib)',
+    Producer: 'kurd-pdflib',
     CreationDate: datestamp(),
   });
 
@@ -119,5 +119,5 @@ function datestamp(): string {
     pad(d.getUTCMinutes()) +
     pad(d.getUTCSeconds()) +
     'Z';
-  return '(' + s + ')';
+  return s;
 }

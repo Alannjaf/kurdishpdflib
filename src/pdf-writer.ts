@@ -148,9 +148,9 @@ export class PdfWriter {
         push(serializeDict(obj.dict!, this.refs) + '\r\n');
       } else {
         push(serializeDict(obj.dict!, this.refs) + '\r\n');
-        push('stream\n');
+        push('stream\r\n');
         push(obj.stream!);
-        push('\nendstream\r\n');
+        push('\r\nendstream\r\n');
       }
       push('endobj\r\n');
     }
@@ -160,10 +160,10 @@ export class PdfWriter {
 
     push('xref\r\n');
     push(`0 ${size}\r\n`);
-    push('0000000000 65535 f \r\n');
+    push('0000000000 65535 f\r\n');
     for (let i = 1; i < this.nextId; i++) {
       const off = xrefOffsets[i] ?? 0;
-      push(off.toString().padStart(10, '0') + ' 00000 n \r\n');
+      push(off.toString().padStart(10, '0') + ' 00000 n\r\n');
     }
 
     const catalog = this.objects.find(o => o.dict?.Type && (o.dict.Type as any).__pdfName === 'Catalog');
