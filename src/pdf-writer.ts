@@ -103,7 +103,7 @@ export class PdfWriter {
     return { id, gen: 0 };
   }
 
-  addImageXObject(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number): PdfRef {
+  addImageXObject(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number, options: { smask?: PdfRef } = {}): PdfRef {
       const dict: Record<string, unknown> = {
           Type: name('XObject'),
           Subtype: name('Image'),
@@ -113,10 +113,18 @@ export class PdfWriter {
           ColorSpace: name('DeviceRGB'),
       };
 
+      if (options.smask) {
+          dict.SMask = options.smask;
+      }
+
+      let streamData = data;
       if (type === 'jpeg') {
           dict.Filter = name('DCTDecode');
       } else if (type === 'png') {
-          throw new Error("PNG support requires zlib/inflation. Only JPEG supported in zero-dependency mode for now.");
+          dict.Filter = name('FlateDecode');
+          // PNGs are handled by decompressing/splitting in document.ts, 
+          // then passed here as raw pixel data (deflated again or left raw).
+          // We'll use deflated data for PNG.
       }
 
       const id = this.allocId();

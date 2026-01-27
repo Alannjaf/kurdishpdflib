@@ -8,6 +8,8 @@ import { PdfWriter, name } from './pdf-writer.js';
 import { createPage, finalizePageContent, type Page, type FontInfo } from './page.js';
 import { embedFont, type EmbeddedFont } from './ttf/embed.js';
 import { buildToUnicodeCMapFromGidPairs, encodeToUnicodeStream } from './encoding.js';
+import { parsePNG } from './png.js';
+import { deflateSync } from 'node:zlib';
 
 export interface FontConfig {
   fontBytes: Uint8Array;
@@ -84,7 +86,30 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     addImage(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number): string {
         imageCount++;
         const id = 'I' + imageCount;
-        const ref = w.addImageXObject(data, type, width, height);
+        
+        let ref: PdfRef;
+        if (type === 'png') {
+            const png = parsePNG(data);
+            let smaskRef: PdfRef | undefined;
+            
+            if (png.alphaData) {
+                // Add SMask image
+                smaskRef = w.addStream({
+                    Type: name('XObject'),
+                    Subtype: name('Image'),
+                    Width: png.width,
+                    Height: png.height,
+                    BitsPerComponent: 8,
+                    ColorSpace: name('DeviceGray'),
+                    Filter: name('FlateDecode'),
+                }, deflateSync(png.alphaData));
+            }
+            
+            ref = w.addImageXObject(deflateSync(png.pixelData), 'png', png.width, png.height, { smask: smaskRef });
+        } else {
+            ref = w.addImageXObject(data, type, width, height);
+        }
+        
         embeddedImages[id] = ref;
         return id;
     },
