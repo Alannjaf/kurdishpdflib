@@ -25,7 +25,7 @@ export interface TextElementOptions {
 export type LayoutElement = 
     | { type: 'text', content: string, options?: TextElementOptions }
     | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string } }
-    | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number, options?: { align?: 'center' | 'end' | 'start' } }
+    | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number, options?: { align?: 'center' | 'end' | 'start', objectFit?: 'fill' | 'contain' | 'cover' } }
     | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
     | { type: 'box', child: LayoutElement, options?: LayoutOptions }
@@ -225,7 +225,49 @@ export class LayoutEngine {
         } else if (el.type === 'rect') {
             this.doc.rect(contentX, contentY - contentH, contentW, contentH, el.options?.style, el.options?.color);
         } else if (el.type === 'image') {
-            this.doc.image(el.data, el.imgType, contentX, contentY - contentH, contentW, contentH);
+            const fit = el.options?.objectFit || 'fill';
+            
+            if (fit === 'fill') {
+                this.doc.image(el.data, el.imgType, contentX, contentY - contentH, contentW, contentH);
+            } else {
+                const dims = this.doc.getImageDimensions(el.data, el.imgType);
+                const imgRatio = dims.width / dims.height;
+                const containerRatio = contentW / contentH;
+                
+                let drawW = contentW;
+                let drawH = contentH;
+                let offsetX = 0;
+                let offsetY = 0;
+                
+                if (fit === 'contain') {
+                    if (imgRatio > containerRatio) {
+                        drawH = contentW / imgRatio;
+                        offsetY = (contentH - drawH) / 2;
+                    } else {
+                        drawW = contentH * imgRatio;
+                        offsetX = (contentW - drawW) / 2;
+                    }
+                    this.doc.image(el.data, el.imgType, contentX + offsetX, contentY - contentH + offsetY, drawW, drawH);
+                } else if (fit === 'cover') {
+                    if (imgRatio > containerRatio) {
+                        drawW = contentH * imgRatio;
+                        drawH = contentH;
+                        offsetX = (drawW - contentW) / 2;
+                        offsetY = 0;
+                    } else {
+                        drawW = contentW;
+                        drawH = contentW / imgRatio;
+                        offsetX = 0;
+                        offsetY = (drawH - contentH) / 2;
+                    }
+                    
+                    this.doc.saveGraphicsState();
+                    this.doc.rect(contentX, contentY - contentH, contentW, contentH, 'N');
+                    this.doc.clip();
+                    this.doc.image(el.data, el.imgType, contentX - offsetX, contentY - contentH - offsetY, drawW, drawH);
+                    this.doc.restoreGraphicsState();
+                }
+            }
         } else if (el.type === 'svg') {
             this.doc.svg(el.content, contentX, contentY, { 
                 scale: el.options?.scale, 

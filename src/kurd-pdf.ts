@@ -3,6 +3,7 @@ import type { Page, ShapedGlyph } from './page.js';
 import { TextShaper, type Hb } from './shaper.js';
 import { writeFileSync } from 'fs';
 import { parseSVG } from './svg.js';
+import { parsePNG } from './png.js';
 
 export interface KurdPDFOptions {
     fonts?: Record<string, { fontBytes: Uint8Array, baseFontName: string }>;
@@ -315,28 +316,11 @@ export class KurdPDF {
         let pxW = originalWidth;
         let pxH = originalHeight;
 
-        if (type === 'jpeg' && (!pxW || !pxH)) {
-            try {
-                let pos = 2; // skip FFD8
-                while (pos < data.length - 8) {
-                    if (data[pos] !== 0xFF) break;
-                    const marker = data[pos + 1];
-                    const len = (data[pos + 2] << 8) | data[pos + 3];
-                    
-                    if (marker >= 0xC0 && marker <= 0xC3) {
-                        pxH = (data[pos + 5] << 8) | data[pos + 6];
-                        pxW = (data[pos + 7] << 8) | data[pos + 8];
-                        break;
-                    }
-                    pos += len + 2;
-                }
-            } catch (e) {
-                console.warn("Failed to extract JPEG dimensions, falling back to display size.");
-            }
+        if (!pxW || !pxH) {
+            const dims = this.getImageDimensions(data, type);
+            pxW = dims.width;
+            pxH = dims.height;
         }
-
-        pxW = pxW || w;
-        pxH = pxH || h;
 
         const id = this.doc.addImage(data, type, pxW, pxH);
         
@@ -349,6 +333,33 @@ export class KurdPDF {
             x, y, width: w, height: h
         });
         return this;
+    }
+
+    getImageDimensions(data: Uint8Array, type: 'jpeg' | 'png'): { width: number, height: number } {
+        if (type === 'png') {
+            try {
+                const png = parsePNG(data);
+                return { width: png.width, height: png.height };
+            } catch (e) {}
+        }
+        
+        // JPEG logic
+        try {
+            let pos = 2; // skip FFD8
+            while (pos < data.length - 8) {
+                if (data[pos] !== 0xFF) break;
+                const marker = data[pos + 1];
+                const len = (data[pos + 2] << 8) | data[pos + 3];
+                
+                if (marker >= 0xC0 && marker <= 0xC3) {
+                    const height = (data[pos + 5] << 8) | data[pos + 6];
+                    const width = (data[pos + 7] << 8) | data[pos + 8];
+                    return { width, height };
+                }
+                pos += len + 2;
+            }
+        } catch (e) {}
+        return { width: 100, height: 100 };
     }
 
     maskedCircleImage(data: Uint8Array, type: 'jpeg' | 'png', cx: number, cy: number, r: number) {

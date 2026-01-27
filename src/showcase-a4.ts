@@ -119,19 +119,32 @@ async function main() {
                                     }
                                 ]
                             },
-                            // Rounded Image Example
+                            // Rounded Image Example (Cover)
                             {
                                 type: 'box',
                                 options: { 
-                                    width: 240, 
+                                    width: 150, 
                                     height: 150, 
                                     backgroundColor: 'white', 
                                     borderWidth: 4, 
                                     borderColor: COL_PRIMARY, 
-                                    borderRadius: 15, // Round corners
+                                    borderRadius: 15, 
                                     align: 'center'
                                 },
-                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 240, height: 150 }
+                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 150, options: { objectFit: 'cover' } }
+                            },
+                            // Contain Example
+                            {
+                                type: 'box',
+                                options: { 
+                                    width: 150, 
+                                    height: 150, 
+                                    backgroundColor: '#bdc3c7', 
+                                    borderWidth: 2, 
+                                    borderColor: '#333', 
+                                    align: 'center'
+                                },
+                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 150, options: { objectFit: 'contain' } }
                             }
                         ]
                     }
