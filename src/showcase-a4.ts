@@ -108,21 +108,14 @@ async function main() {
                                     // Layer 1: Pattern
                                     { type: 'rect', width: 240, height: 150, options: { style: 'F', color: '#bdc3c7' } },
                                     { type: 'rect', width: 50, height: 150, options: { style: 'F', color: '#95a5a6' } }, // Stripe
-                                    // Layer 2: Transparent PNG
+                                    // Layer 2: Transparent PNG (Directly, no wrapping box)
                                     { 
-                                        type: 'box', 
-                                        options: { align: 'center' }, // Center in Z-Stack
-                                        child: { type: 'image', data: pngBytes, imgType: 'png', width: 100, height: 100 }
-                                    },
-                                    // Layer 3: Label
-                                    {
-                                        type: 'box',
-                                        options: { align: 'end', padding: [10, 10, 0, 0] },
-                                        child: { 
-                                            type: 'box', 
-                                            options: { backgroundColor: 'white', padding: 5, borderRadius: 4 },
-                                            child: { type: 'text', content: 'Transparency', options: { font: 'EN', size: 10 } }
-                                        }
+                                        type: 'image', 
+                                        data: pngBytes, 
+                                        imgType: 'png', 
+                                        width: 100, 
+                                        height: 100,
+                                        options: { align: 'center' } // Center in Z-Stack logic
                                     }
                                 ]
                             },
@@ -166,8 +159,8 @@ async function main() {
         ]
     }, 0, 842); // A4 Top-Left
 
-    doc.save("out-showcase-a4.pdf");
-    console.log("Saved to out-showcase-a4.pdf");
+    doc.save("out-showcase-a4-v2.pdf");
+    console.log("Saved to out-showcase-a4-v2.pdf");
 }
 
 main().catch(console.error);
