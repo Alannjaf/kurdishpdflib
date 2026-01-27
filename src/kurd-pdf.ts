@@ -285,36 +285,42 @@ export class KurdPDF {
     }
 
     /**
-     * Draw a smooth circle.
+     * Draw a smooth circle using 8-segment high-precision Bezier arcs.
      */
     circle(cx: number, cy: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
          if (!this.currentPage) throw new Error("No page exists.");
          
-         const k = 0.5522;
-         const kr = r * k;
-         const points = [
-             { x: cx + r, y: cy, type: 'M' },
-             { x: cx + r, y: cy + kr, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
-             { x: cx, y: cy + r, type: 'L' },
-             { x: cx - kr, y: cy + r, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
-             { x: cx - r, y: cy, type: 'L' },
-             { x: cx - r, y: cy - kr, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
-             { x: cx, y: cy - r, type: 'L' },
-             { x: cx + kr, y: cy - r, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} },
-             { x: cx + r, y: cy, type: 'L' }
-         ] as any;
+         const angleStep = Math.PI / 4;
+         const k = (4/3) * Math.tan(angleStep / 4);
+         const L = r * k;
+         const points: any[] = [];
+         
+         for (let i = 0; i < 8; i++) {
+             const a1 = i * angleStep, a2 = (i + 1) * angleStep;
+             const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+             const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+             const tx1 = -Math.sin(a1) * L, ty1 = Math.cos(a1) * L;
+             const tx2 = -Math.sin(a2) * L, ty2 = Math.cos(a2) * L;
+             
+             if (i === 0) points.push({ x: x1, y: y1, type: 'M' });
+             points.push({ 
+                 x: x2, y: y2, type: 'C', 
+                 cp1: { x: x1 + tx1, y: y1 + ty1 }, 
+                 cp2: { x: x2 - tx2, y: y2 - ty2 } 
+             });
+         }
 
          this.path(points, style, color);
          return this;
     }
 
     /**
-     * Draw a rounded rectangle.
+     * Draw a rounded rectangle with smooth high-precision arcs.
      */
     roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
         if (!this.currentPage) throw new Error("No page exists.");
         
-        const k = 0.5522;
+        const k = 0.552284749831;
         const kr = r * k;
         const points = [
             { x: x + r, y: y, type: 'M' },
@@ -383,6 +389,62 @@ export class KurdPDF {
         this.currentPage.drawImage(id, {
             x, y, width: w, height: h
         });
+        return this;
+    }
+
+    /**
+     * Draw an image masked by a circle.
+     */
+    maskedCircleImage(data: Uint8Array, type: 'jpeg' | 'png', cx: number, cy: number, r: number) {
+        if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
+        
+        // 1. Get circle points
+        const k = 0.552284749831;
+        const kr = r * k;
+        const points = [
+            { x: cx + r, y: cy, type: 'M' },
+            { x: cx + r, y: cy + kr, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
+            { x: cx, y: cy + r, type: 'L' },
+            { x: cx - kr, y: cy + r, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
+            { x: cx - r, y: cy, type: 'L' },
+            { x: cx - r, y: cy - kr, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
+            { x: cx, y: cy - r, type: 'L' },
+            { x: cx + kr, y: cy - r, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} },
+            { x: cx + r, y: cy, type: 'L' }
+        ] as any[];
+
+        this.saveGraphicsState();
+        this.clip(points);
+        this.image(data, type, cx - r, cy - r, r * 2, r * 2);
+        this.restoreGraphicsState();
+        return this;
+    }
+
+    /**
+     * Draw a trilingual line (Kurdish/Arabic/English) with automatic font switching.
+     * Prevents empty boxes by using the 'AR' font for script and 'EN' for Latin/Slashes.
+     */
+    trilingualLine(y: number, krd: string, ar: string, en: string, rightEdge: number, fontSize: number, color: string, arFont = 'AR', enFont = 'EN') {
+        if (!this.currentPage) throw new Error("No page exists.");
+        
+        let x = rightEdge;
+        const slash = " / ";
+        
+        const drawPart = (text: string, font: string, isRtl: boolean) => {
+            const w = this.measureText(text, fontSize, { font, rtl: isRtl });
+            this.text(text, x - w, y, { font, size: fontSize, rtl: isRtl, color });
+            return w;
+        };
+
+        if (krd) x -= drawPart(krd, arFont, true);
+        if (ar) {
+            x -= drawPart(slash, enFont, false);
+            x -= drawPart(ar, arFont, true);
+        }
+        if (en) {
+            x -= drawPart(slash, enFont, false);
+            x -= drawPart(en, enFont, false);
+        }
         return this;
     }
 
