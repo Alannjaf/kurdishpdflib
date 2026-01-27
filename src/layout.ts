@@ -16,8 +16,9 @@ export interface TextElementOptions {
     size?: number;
     rtl?: boolean;
     color?: string;
-    align?: 'left' | 'right' | 'center';
+    align?: 'left' | 'right' | 'center' | 'justify';
     width?: number;
+    lineHeight?: number;
 }
 
 export type LayoutElement = 
@@ -140,13 +141,47 @@ export class LayoutEngine {
         if (el.type === 'text') {
             const size = el.options?.size || 12;
             const maxWidth = el.options?.width;
+            const lineHeightVal = el.options?.lineHeight || 1.4;
+            const align = el.options?.align || 'left';
+
             if (maxWidth && maxWidth > 0) {
                 const lines = this.wrapText(el.content, maxWidth, size, el.options?.font, el.options?.rtl);
                 let currentY = contentY;
-                const lineHeight = size * 1.4;
-                for (const line of lines) {
-                    // Note: text() is called at top of character, adjust for layout-engine's top-left preference
-                    this.doc.text(line, contentX, currentY - size, el.options);
+                const lineHeight = size * lineHeightVal;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const isLastLine = i === lines.length - 1;
+                    
+                    if (align === 'justify' && !isLastLine && !el.options?.rtl) {
+                        // Implement manual justification for LTR text
+                        const words = line.trim().split(/\s+/);
+                        if (words.length > 1) {
+                            const wordWidths = words.map(w => this.doc.measureText(w, size, { font: el.options?.font }));
+                            const totalWordWidth = wordWidths.reduce((a, b) => a + b, 0);
+                            const availableSpace = maxWidth - totalWordWidth;
+                            const spacePerGap = availableSpace / (words.length - 1);
+                            
+                            let wordX = contentX;
+                            for (let j = 0; j < words.length; j++) {
+                                this.doc.text(words[j], wordX, currentY - size, el.options);
+                                wordX += wordWidths[j] + spacePerGap;
+                            }
+                        } else {
+                            this.doc.text(line, contentX, currentY - size, el.options);
+                        }
+                    } else if (align === 'center') {
+                        const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: el.options?.rtl });
+                        const centerOffset = (maxWidth - lineWidth) / 2;
+                        this.doc.text(line, contentX + centerOffset, currentY - size, el.options);
+                    } else if (align === 'right' || (el.options?.rtl && align !== 'left')) {
+                         const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: el.options?.rtl });
+                         const rightOffset = maxWidth - lineWidth;
+                         this.doc.text(line, contentX + rightOffset, currentY - size, el.options);
+                    } else {
+                        // Left aligned (default)
+                        this.doc.text(line, contentX, currentY - size, el.options);
+                    }
                     currentY -= lineHeight;
                 }
             } else {

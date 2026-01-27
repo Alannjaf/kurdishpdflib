@@ -2,6 +2,7 @@ import { createDocument, type PDFDocument, type CreateDocumentOptions } from './
 import type { Page, ShapedGlyph } from './page.js';
 import { TextShaper, type Hb } from './shaper.js';
 import { writeFileSync } from 'fs';
+import { parseSVG } from './svg.js';
 
 export interface KurdPDFOptions {
     fonts?: Record<string, { fontBytes: Uint8Array, baseFontName: string }>;
@@ -444,6 +445,35 @@ export class KurdPDF {
         if (en) {
             x -= drawPart(slash, enFont, false);
             x -= drawPart(en, enFont, false);
+        }
+        return this;
+    }
+
+    /**
+     * Render an SVG path string.
+     * @param svgContent The SVG string (or just the path data d="...")
+     * @param x X position
+     * @param y Y position
+     * @param options Scale and color options
+     */
+    svg(svgContent: string, x: number, y: number, options: { scale?: number } = {}) {
+        if (!this.currentPage) throw new Error("No page exists.");
+        
+        const scale = options.scale || 1.0;
+        
+        const paths = parseSVG(svgContent);
+        
+        for (const path of paths) {
+            const transformedPoints = path.points.map(p => ({
+                ...p,
+                x: x + p.x * scale,
+                y: y + p.y * scale, 
+                cp1: p.cp1 ? { x: x + p.cp1.x * scale, y: y + p.cp1.y * scale } : undefined,
+                cp2: p.cp2 ? { x: x + p.cp2.x * scale, y: y + p.cp2.y * scale } : undefined
+            }));
+
+            // Use the path's specific color if available
+            this.path(transformedPoints, 'F', path.color);
         }
         return this;
     }
