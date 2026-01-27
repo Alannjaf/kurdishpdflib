@@ -1,9 +1,14 @@
 export interface LayoutOptions {
     width?: number;
     height?: number;
-    padding?: number | [number, number]; 
+    padding?: number | [number, number] | [number, number, number, number]; // uniform | [v, h] | [t, r, b, l]
+    margin?: number | [number, number] | [number, number, number, number];
     gap?: number;
     align?: 'start' | 'center' | 'end';
+    backgroundColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
+    borderRadius?: number;
 }
 
 export interface TextElementOptions {
@@ -19,7 +24,22 @@ export type LayoutElement =
     | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string } }
     | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number }
     | { type: 'vstack' | 'hstack', children: LayoutElement[], options?: LayoutOptions }
+    | { type: 'box', child: LayoutElement, options?: LayoutOptions }
     | { type: 'spacer', size: number };
+
+interface SideValues {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+}
+
+function parseSides(val: number | [number, number] | [number, number, number, number] | undefined): SideValues {
+    if (val === undefined) return { top: 0, right: 0, bottom: 0, left: 0 };
+    if (typeof val === 'number') return { top: val, right: val, bottom: val, left: val };
+    if (val.length === 2) return { top: val[0], right: val[1], bottom: val[0], left: val[1] };
+    return { top: val[0], right: val[1], bottom: val[2], left: val[3] };
+}
 
 export class LayoutEngine {
     constructor(private doc: any) {}
@@ -34,66 +54,110 @@ export class LayoutEngine {
     }
 
     calculateSize(el: LayoutElement): { width: number, height: number } {
+        let w = 0, h = 0;
+
         if (el.type === 'text') {
             const size = el.options?.size || 12;
-            const w = this.doc.measureText(el.content, size, { font: el.options?.font, rtl: el.options?.rtl });
-            return { width: w, height: size * 1.2 };
-        }
-        if (el.type === 'rect' || el.type === 'image') {
-            return { width: el.width, height: el.height };
-        }
-        if (el.type === 'spacer') {
-            return { width: el.size, height: el.size };
-        }
-        if (el.type === 'vstack') {
+            w = this.doc.measureText(el.content, size, { font: el.options?.font, rtl: el.options?.rtl });
+            h = size * 1.2;
+        } else if (el.type === 'rect' || el.type === 'image') {
+            w = el.width;
+            h = el.height;
+        } else if (el.type === 'spacer') {
+            w = el.size;
+            h = el.size;
+        } else if (el.type === 'vstack') {
             const gap = el.options?.gap || 0;
             const sizes = el.children.map(c => this.calculateSize(c));
-            const width = Math.max(...sizes.map(s => s.width), el.options?.width || 0);
-            const height = sizes.reduce((acc, s) => acc + s.height, 0) + (el.children.length - 1) * gap;
-            return { width, height };
-        }
-        if (el.type === 'hstack') {
+            w = Math.max(...sizes.map(s => s.width), el.options?.width || 0);
+            h = sizes.reduce((acc, s) => acc + s.height, 0) + (el.children.length > 0 ? (el.children.length - 1) * gap : 0);
+        } else if (el.type === 'hstack') {
             const gap = el.options?.gap || 0;
             const sizes = el.children.map(c => this.calculateSize(c));
-            const width = sizes.reduce((acc, s) => acc + s.width, 0) + (el.children.length - 1) * gap;
-            const height = Math.max(...sizes.map(s => s.height), el.options?.height || 0);
-            return { width, height };
+            w = sizes.reduce((acc, s) => acc + s.width, 0) + (el.children.length > 0 ? (el.children.length - 1) * gap : 0);
+            h = Math.max(...sizes.map(s => s.height), el.options?.height || 0);
+        } else if (el.type === 'box') {
+            const inner = this.calculateSize(el.child);
+            w = inner.width;
+            h = inner.height;
         }
-        return { width: 0, height: 0 };
+
+        // Add padding
+        if ('options' in el && el.options) {
+            const p = parseSides((el.options as any).padding);
+            const m = parseSides((el.options as any).margin);
+            w += p.left + p.right + m.left + m.right;
+            h += p.top + p.bottom + m.top + m.bottom;
+
+            // Override with fixed dimensions if provided
+            if ((el.options as any).width) w = (el.options as any).width + m.left + m.right;
+            if ((el.options as any).height) h = (el.options as any).height + m.top + m.bottom;
+        }
+
+        return { width: w, height: h };
     }
 
     private drawElement(el: LayoutElement, x: number, y: number, w: number, h: number) {
+        const options: LayoutOptions = (el as any).options || {};
+        const m = parseSides(options.margin);
+        const p = parseSides(options.padding);
+
+        const innerX = x + m.left;
+        const innerY = y - m.top;
+        const innerW = w - m.left - m.right;
+        const innerH = h - m.top - m.bottom;
+
+        // Draw Background and Border
+        if (options.backgroundColor || (options.borderColor && options.borderWidth)) {
+            const style = options.backgroundColor && options.borderColor ? 'FD' : (options.backgroundColor ? 'F' : 'S');
+            
+            if (options.borderRadius && this.doc.roundedRect) {
+                this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor || options.borderColor);
+                // Note: simplified color logic, assuming single color for both or doc handles it
+            } else {
+                this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor || options.borderColor);
+            }
+        }
+
+        const contentX = innerX + p.left;
+        const contentY = innerY - p.top;
+        const contentW = innerW - p.left - p.right;
+        const contentH = innerH - p.top - p.bottom;
+
         if (el.type === 'text') {
-            // PDF coordinates are bottom-left, but layout engine uses top-left for easier thinking
-            this.doc.text(el.content, x, y - (el.options?.size || 12), el.options);
+            this.doc.text(el.content, contentX, contentY - (el.options?.size || 12), el.options);
         } else if (el.type === 'rect') {
-            this.doc.rect(x, y - h, w, h, el.options?.style, el.options?.color);
+            this.doc.rect(contentX, contentY - contentH, contentW, contentH, el.options?.style, el.options?.color);
         } else if (el.type === 'image') {
-            this.doc.image(el.data, el.imgType, x, y - h, w, h);
+            this.doc.image(el.data, el.imgType, contentX, contentY - contentH, contentW, contentH);
         } else if (el.type === 'vstack') {
-            const gap = el.options?.gap || 0;
-            let currentY = y;
+            const gap = options.gap || 0;
+            let currentY = contentY;
             for (const child of el.children) {
                 const size = this.calculateSize(child);
                 let offsetX = 0;
-                if (el.options?.align === 'center') offsetX = (w - size.width) / 2;
-                else if (el.options?.align === 'end') offsetX = w - size.width;
+                const childW = size.width - parseSides((child as any).options?.margin).left - parseSides((child as any).options?.margin).right;
+                if (options.align === 'center') offsetX = (contentW - size.width) / 2;
+                else if (options.align === 'end') offsetX = contentW - size.width;
                 
-                this.drawElement(child, x + offsetX, currentY, size.width, size.height);
+                this.drawElement(child, contentX + offsetX, currentY, size.width, size.height);
                 currentY -= (size.height + gap);
             }
         } else if (el.type === 'hstack') {
-            const gap = el.options?.gap || 0;
-            let currentX = x;
+            const gap = options.gap || 0;
+            let currentX = contentX;
             for (const child of el.children) {
                 const size = this.calculateSize(child);
                 let offsetY = 0;
-                if (el.options?.align === 'center') offsetY = (h - size.height) / 2;
-                else if (el.options?.align === 'end') offsetY = h - size.height;
+                if (options.align === 'center') offsetY = (contentH - size.height) / 2;
+                else if (options.align === 'end') offsetY = contentH - size.height;
 
-                this.drawElement(child, currentX, y - offsetY, size.width, size.height);
+                this.drawElement(child, currentX, contentY - offsetY, size.width, size.height);
                 currentX += (size.width + gap);
             }
+        } else if (el.type === 'box') {
+            const size = this.calculateSize(el.child);
+            this.drawElement(el.child, contentX, contentY, size.width, size.height);
         }
     }
 }
