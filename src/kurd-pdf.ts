@@ -271,6 +271,9 @@ export class KurdPDF {
         return this;
     }
 
+    /**
+     * Set a custom path as the clipping area.
+     */
     clip(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[]) {
         if (!this.currentPage) throw new Error("No page exists.");
         this.currentPage.drawPath({
@@ -282,12 +285,51 @@ export class KurdPDF {
     }
 
     /**
-     * Draw a circle (helper that uses path approximation).
+     * Draw a smooth circle.
      */
-    circle(x: number, y: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
-         // actually, let's keep it simple for now and just expose path. 
-         // Implementing circle correctly takes a bit of math typing.
+    circle(cx: number, cy: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
+         if (!this.currentPage) throw new Error("No page exists.");
+         
+         const k = 0.5522;
+         const kr = r * k;
+         const points = [
+             { x: cx + r, y: cy, type: 'M' },
+             { x: cx + r, y: cy + kr, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
+             { x: cx, y: cy + r, type: 'L' },
+             { x: cx - kr, y: cy + r, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
+             { x: cx - r, y: cy, type: 'L' },
+             { x: cx - r, y: cy - kr, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
+             { x: cx, y: cy - r, type: 'L' },
+             { x: cx + kr, y: cy - r, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} },
+             { x: cx + r, y: cy, type: 'L' }
+         ] as any;
+
+         this.path(points, style, color);
          return this;
+    }
+
+    /**
+     * Draw a rounded rectangle.
+     */
+    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
+        if (!this.currentPage) throw new Error("No page exists.");
+        
+        const k = 0.5522;
+        const kr = r * k;
+        const points = [
+            { x: x + r, y: y, type: 'M' },
+            { x: x + w - r, y: y, type: 'L' },
+            { x: x + w, y: y + r, type: 'C', cp1: {x: x + w - r + kr, y: y}, cp2: {x: x + w, y: y + r - kr} },
+            { x: x + w, y: y + h - r, type: 'L' },
+            { x: x + w - r, y: y + h, type: 'C', cp1: {x: x + w, y: y + h - r + kr}, cp2: {x: x + w - r + kr, y: y + h} },
+            { x: x + r, y: y + h, type: 'L' },
+            { x: x, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x, y: y + h - r + kr} },
+            { x: x, y: y + r, type: 'L' },
+            { x: x + r, y: y, type: 'C', cp1: {x: x, y: y + r - kr}, cp2: {x: x + r - kr, y: y} }
+        ] as any;
+
+        this.path(points, style, color);
+        return this;
     }
 
     /**
