@@ -1,101 +1,123 @@
-# Developer Guide: Building with Kurd-PDFLib
+# Kurd-PDFLib Guide
 
-This guide explains how to use `Kurd-PDFLib` to build professional-grade documents, like the **Kurdistan Veterinary Syndicate ID Card**.
+A zero-dependency Node.js library for creating PDFs with advanced support for **Kurdish (Sorani)**, **Arabic**, and **English** text. It features a powerful **Layout Engine** inspired by modern UI frameworks.
 
----
+## Features
 
-## 1. Getting Started
+- **Multi-script Support**: Seamless mixing of RTL (Kurdish/Arabic) and LTR (English) text.
+- **Advanced Text Shaping**: Uses HarfBuzz for correct Arabic ligature rendering.
+- **Layout Engine**: Build UIs with `vstack`, `hstack`, `zstack`, and `box`.
+- **Styling**: Support for `padding`, `margin`, `backgroundColor`, `borderColor`, and `borderRadius`.
+- **Image Support**: JPEG and PNG (with alpha/transparency).
+- **Vector Graphics**: Render SVG paths directly as vectors.
+- **Typography**: Automatic text wrapping, justification, and custom line height.
 
-Kurd-PDFLib uses **HarfBuzz** for text shaping, which allows it to handle complex scripts like Kurdish (Central/Sorani and Northern/Kurmanji) correctly.
-
-### Initialization
-Always initialize the document with the fonts you intend to use. For trilingual documents, we recommend at least one Arabic/Kurdish font and one Latin font.
+## Getting Started
 
 ```typescript
+import { KurdPDF, LayoutEngine } from './index.js';
+import { readFileSync } from 'fs';
+
+// 1. Initialize Document
 const doc = new KurdPDF({
     fonts: {
-        'AR': { fontBytes: arabicBytes, baseFontName: 'NotoSansArabic' },
-        'EN': { fontBytes: latinBytes, baseFontName: 'NotoSans' }
+        'AR': { fontBytes: fs.readFileSync('NotoSansArabic.ttf'), baseFontName: 'NotoSansArabic' },
+        'EN': { fontBytes: fs.readFileSync('NotoSans.ttf'), baseFontName: 'NotoSans' }
     }
 });
-await doc.init({ width: 243, height: 153 }); // ID Card size in points
+await doc.init();
+
+// 2. Initialize Layout Engine
+const layout = new LayoutEngine(doc);
+
+// 3. Render Content
+layout.render({
+    type: 'vstack',
+    options: { gap: 20, padding: 30, align: 'center' },
+    children: [
+        { type: 'text', content: 'Hello World', options: { font: 'EN', size: 24 } },
+        { type: 'text', content: 'سڵاو لە جیهان', options: { font: 'AR', size: 24, rtl: true } }
+    ]
+}, 0, 842); // Render at top-left (0, 842) for A4
+
+// 4. Save
+doc.save('output.pdf');
 ```
 
----
+## The Layout Engine
 
-## 2. Advanced Layout Techniques
+The `LayoutEngine` lets you build complex designs without manual coordinate math.
 
-### Floating Header Capsule
-To create a modern "floating" header that bleeds off the right edge, use `doc.path` with a large corner radius.
+### Container Types
+
+*   **`vstack`**: Stacks elements vertically.
+*   **`hstack`**: Stacks elements horizontally.
+*   **`zstack`**: Overlays elements on top of each other (useful for backgrounds).
+*   **`box`**: Wraps a single element to add padding, borders, or background color.
+
+### Common Options
+
+All containers support `LayoutOptions`:
 
 ```typescript
-// For a perfect semi-circle, set radius (hR) to half the height (hH)
-const hH = 56, hT = H - 15, hB = hT - hH, hX = 70, hR = 28;
-const hK = hR * 0.5522; // Kappa constant
-
-doc.path([
-    { x: hX + hR, y: hT, type: 'M' },
-    { x: W, y: hT, type: 'L' },
-    { x: W, y: hB, type: 'L' },
-    { x: hX + hR, y: hB, type: 'L' },
-    { x: hX, y: hB + hR, type: 'C', cp1: { x: hX + hR - hK, y: hB }, cp2: { x: hX, y: hB + hR - hK } },
-    { x: hX + hR, y: hT, type: 'C', cp1: { x: hX, y: hB + hR + hK }, cp2: { x: hX + hR - hK, y: hT } }
-], 'F', '#FFFFFF');
+options: {
+    width: 200,             // Force width
+    gap: 10,                // Space between children
+    padding: 20,            // Padding around content (supports [v, h] or [t, r, b, l])
+    margin: 10,             // Margin outside element
+    align: 'center',        // 'start', 'center', 'end', 'space-between', 'space-evenly'
+    backgroundColor: '#eee',// Hex color
+    borderColor: 'red',     // Hex color
+    borderWidth: 1,         // Border thickness
+    borderRadius: 5         // Rounded corners
+}
 ```
 
-### Vertical Centering
-To center a block of text vertically, calculate the center of your area and apply an offset based on the number of lines and font size.
+### Text Options
+
+Text elements support advanced typography:
 
 ```typescript
-const textCenterY = hB + hR - 3; // Shift slightly for baseline adjustment
-doc.text("Line 1", x, textCenterY + 13, { size: 9 });
-doc.text("Line 2", x, textCenterY, { size: 9 });
-doc.text("Line 3", x, textCenterY - 13, { size: 9 });
+{
+    type: 'text',
+    content: 'Long paragraph...',
+    options: {
+        font: 'EN',
+        size: 12,
+        width: 300,         // Width constraint for wrapping
+        align: 'justify',   // 'left', 'right', 'center', 'justify'
+        lineHeight: 1.5     // Multiplier (e.g. 1.5x spacing)
+    }
+}
 ```
 
----
+## Images & Vectors
 
-## 3. Working with Kurdish/Arabic Text
-
-To render Kurdish correctly, you must use a font that supports Arabic script and enable RTL features.
-
-### RTL Text
-When using `doc.text`, follow these rules for Kurdish:
-1. **`font`**: Use your Arabic/Kurdish font key.
-2. **`rtl: true`**: This tells the shaper to handle character joining and bidirectional order.
-3. **`align: 'right'`**: Since Kurdish is read right-to-left, you usually want to align text to the right edge.
-4. **`width`**: Providing a width enables automatic line wrapping.
-
----
-
-## 4. Circular Masking (Clipping)
-
-Since JPEGs do not support transparency, you must use a **Clipping Mask** to create a circular logo without white corners.
-
-### The Masking Workflow
-1.  **Save State**: `doc.saveGraphicsState()`
-2.  **Define Mask**: `doc.clip(points)` (use Bezier arcs for a circle)
-3.  **Draw Background**: `doc.rect()` or `doc.path()`
-4.  **Draw Image**: `doc.image()`
-5.  **Restore State**: `doc.restoreGraphicsState()`
-
-*Crucial: You must restore the state, otherwise the mask will hide content on the rest of the page!*
-
----
-
-## 5. Precise Alignment with `measureText`
-
-If you need to align multiple elements (like a label followed by a value), use `measureText` to calculate exact widths.
+### PNG & JPEG
+Use `type: 'image'` within a layout:
 
 ```typescript
-const textWidth = doc.measureText("Label", 10, { font: 'EN' });
-// Use this to calculate the starting X for the next element!
+{ 
+    type: 'image', 
+    data: pngBytes, 
+    imgType: 'png', 
+    width: 100, 
+    height: 100 
+}
+```
+*Note: PNG transparency is supported automatically.*
+
+### SVG Vectors
+You can render SVG paths directly using the low-level API:
+
+```typescript
+const svgContent = '<svg>...</svg>'; // or path data d="..."
+doc.svg(svgContent, 100, 100, { scale: 0.5, color: '#FF0000' });
 ```
 
----
+## Examples
 
-## 6. Best Practices
-
-1. **High Precision**: The library uses 6-decimal precision for all vector paths to ensure perfectly smooth curves.
-2. **Kappa Constant**: Always use `0.5522` for circular Bezier arcs to avoid "jagged" or segmented edges.
-3. **Double Sided**: Use `doc.addPage(W, H)` to create double-sided ID cards. Content on Page 2 will inherit fonts but has its own independent coordinate state.
+Check the `src/` folder for complete examples:
+- `syndicate-id-v2.ts`: Complex ID card with styling.
+- `test-flex.ts`: Demonstrates `zstack` and `space-between`.
+- `test-text-polish.ts`: Demonstrates text justification and wrapping.
