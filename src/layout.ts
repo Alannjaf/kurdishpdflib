@@ -17,6 +17,7 @@ export interface TextElementOptions {
     rtl?: boolean;
     color?: string;
     align?: 'left' | 'right' | 'center';
+    width?: number;
 }
 
 export type LayoutElement = 
@@ -58,8 +59,20 @@ export class LayoutEngine {
 
         if (el.type === 'text') {
             const size = el.options?.size || 12;
-            w = this.doc.measureText(el.content, size, { font: el.options?.font, rtl: el.options?.rtl });
-            h = size * 1.2;
+            const font = el.options?.font;
+            const rtl = el.options?.rtl;
+            const maxWidth = el.options?.width;
+
+            if (maxWidth && maxWidth > 0) {
+                // Multi-line wrapping calculation
+                const lines = this.wrapText(el.content, maxWidth, size, font, rtl);
+                w = maxWidth;
+                h = lines.length * (size * 1.4);
+            } else {
+                // Single line
+                w = this.doc.measureText(el.content, size, { font, rtl });
+                h = size * 1.2;
+            }
         } else if (el.type === 'rect' || el.type === 'image') {
             w = el.width;
             h = el.height;
@@ -125,7 +138,20 @@ export class LayoutEngine {
         const contentH = innerH - p.top - p.bottom;
 
         if (el.type === 'text') {
-            this.doc.text(el.content, contentX, contentY - (el.options?.size || 12), el.options);
+            const size = el.options?.size || 12;
+            const maxWidth = el.options?.width;
+            if (maxWidth && maxWidth > 0) {
+                const lines = this.wrapText(el.content, maxWidth, size, el.options?.font, el.options?.rtl);
+                let currentY = contentY;
+                const lineHeight = size * 1.4;
+                for (const line of lines) {
+                    // Note: text() is called at top of character, adjust for layout-engine's top-left preference
+                    this.doc.text(line, contentX, currentY - size, el.options);
+                    currentY -= lineHeight;
+                }
+            } else {
+                this.doc.text(el.content, contentX, contentY - (el.options?.size || 12), el.options);
+            }
         } else if (el.type === 'rect') {
             this.doc.rect(contentX, contentY - contentH, contentW, contentH, el.options?.style, el.options?.color);
         } else if (el.type === 'image') {
@@ -159,5 +185,24 @@ export class LayoutEngine {
             const size = this.calculateSize(el.child);
             this.drawElement(el.child, contentX, contentY, size.width, size.height);
         }
+    }
+
+    private wrapText(text: string, maxWidth: number, size: number, font?: string, rtl?: boolean): string[] {
+        const words = text.split(/\s+/);
+        const lines: string[] = [];
+        let currentLine: string[] = [];
+
+        for (const word of words) {
+            const testLine = [...currentLine, word].join(' ');
+            const width = this.doc.measureText(testLine, size, { font, rtl });
+            if (width > maxWidth && currentLine.length > 0) {
+                lines.push(currentLine.join(' '));
+                currentLine = [word];
+            } else {
+                currentLine.push(word);
+            }
+        }
+        if (currentLine.length > 0) lines.push(currentLine.join(' '));
+        return lines;
     }
 }
