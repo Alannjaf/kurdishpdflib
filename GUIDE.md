@@ -2,15 +2,16 @@
 
 A zero-dependency Node.js library for creating PDFs with advanced support for **Kurdish (Sorani)**, **Arabic**, and **English** text. It features a powerful **Layout Engine** inspired by modern UI frameworks.
 
-## Features
+## Core Features
 
-- **Multi-script Support**: Seamless mixing of RTL (Kurdish/Arabic) and LTR (English) text.
-- **Advanced Text Shaping**: Uses HarfBuzz for correct Arabic ligature rendering.
-- **Layout Engine**: Build UIs with `vstack`, `hstack`, `zstack`, and `box`.
-- **Styling**: Support for `padding`, `margin`, `backgroundColor`, `borderColor`, and `borderRadius`.
-- **Image Support**: JPEG and PNG (with alpha/transparency).
-- **Vector Graphics**: Render SVG paths directly as vectors.
-- **Typography**: Automatic text wrapping, justification, and custom line height.
+- **Multi-script Support**: Seamlessly mix RTL (Kurdish/Arabic) and LTR (English) text in the same document.
+- **Advanced Text Shaping**: Built-in HarfBuzz engine for correct Arabic/Kurdish ligature rendering.
+- **Modern Layout Engine**: Build complex UIs using `vstack`, `hstack`, `zstack`, and `box` containers.
+- **Rich Styling**: Support for `padding`, `margin`, `backgroundColor`, `borderColor`, `borderWidth`, and `borderRadius`.
+- **Image Support**: JPEG and PNG support. PNGs automatically handle alpha-channel transparency using PDF Soft Masks (SMask).
+- **Vector Graphics**: Full SVG path parsing and rendering directly into PDF vectors.
+- **Typography Polish**: Automatic text wrapping, cross-script justification (LTR and RTL), and custom line height control.
+- **Opacity**: True alpha transparency support for shapes, paths, and vectors.
 
 ## Getting Started
 
@@ -18,11 +19,11 @@ A zero-dependency Node.js library for creating PDFs with advanced support for **
 import { KurdPDF, LayoutEngine } from './index.js';
 import { readFileSync } from 'fs';
 
-// 1. Initialize Document
+// 1. Initialize Document with Fonts
 const doc = new KurdPDF({
     fonts: {
-        'AR': { fontBytes: fs.readFileSync('NotoSansArabic.ttf'), baseFontName: 'NotoSansArabic' },
-        'EN': { fontBytes: fs.readFileSync('NotoSans.ttf'), baseFontName: 'NotoSans' }
+        'AR': { fontBytes: readFileSync('NotoSansArabic.ttf'), baseFontName: 'NotoSansArabic' },
+        'EN': { fontBytes: readFileSync('NotoSans.ttf'), baseFontName: 'NotoSans' }
     }
 });
 await doc.init();
@@ -30,7 +31,7 @@ await doc.init();
 // 2. Initialize Layout Engine
 const layout = new LayoutEngine(doc);
 
-// 3. Render Content
+// 3. Render Content (using standard A4 coordinates: top-left is 0, 842)
 layout.render({
     type: 'vstack',
     options: { gap: 20, padding: 30, align: 'center' },
@@ -38,86 +39,116 @@ layout.render({
         { type: 'text', content: 'Hello World', options: { font: 'EN', size: 24 } },
         { type: 'text', content: 'سڵاو لە جیهان', options: { font: 'AR', size: 24, rtl: true } }
     ]
-}, 0, 842); // Render at top-left (0, 842) for A4
+}, 0, 842);
 
-// 4. Save
+// 4. Save to File
 doc.save('output.pdf');
 ```
 
+---
+
 ## The Layout Engine
 
-The `LayoutEngine` lets you build complex designs without manual coordinate math.
+The `LayoutEngine` handles all coordinate math automatically, allowing you to focus on the structure of your document.
 
 ### Container Types
 
-*   **`vstack`**: Stacks elements vertically.
-*   **`hstack`**: Stacks elements horizontally.
-*   **`zstack`**: Overlays elements on top of each other (useful for backgrounds).
-*   **`box`**: Wraps a single element to add padding, borders, or background color.
+*   **`vstack`**: Arranges children vertically. Supports `align` (`start`, `center`, `end`, `space-between`, `space-evenly`) and `gap`.
+*   **`hstack`**: Arranges children horizontally. Supports `align` and `gap`.
+*   **`zstack`**: Overlays children on top of each other. Perfect for background patterns or text overlays.
+*   **`box`**: A wrapper for a single element. Used to apply styling (backgrounds, borders, padding) or to constrain an element's size.
 
-### Common Options
+### Global Styling Options (`LayoutOptions`)
 
-All containers support `LayoutOptions`:
+Every element and container accepts these options:
 
-```typescript
-options: {
-    width: 200,             // Force width
-    gap: 10,                // Space between children
-    padding: 20,            // Padding around content (supports [v, h] or [t, r, b, l])
-    margin: 10,             // Margin outside element
-    align: 'center',        // 'start', 'center', 'end', 'space-between', 'space-evenly'
-    backgroundColor: '#eee',// Hex color
-    borderColor: 'red',     // Hex color
-    borderWidth: 1,         // Border thickness
-    borderRadius: 5         // Rounded corners
-}
-```
+| Option | Type | Description |
+| :--- | :--- | :--- |
+| `width`, `height` | `number` | Fix the dimensions of the element. |
+| `padding` | `number \| [number, number]` | Internal spacing. `[vertical, horizontal]`. |
+| `margin` | `number \| [number, number]` | External spacing around the element. |
+| `backgroundColor` | `string` | Hex color (e.g., `#FF0000`). |
+| `borderColor` | `string` | Hex color for the border stroke. |
+| `borderWidth` | `number` | Thickness of the border. |
+| `borderRadius` | `number` | Radius for rounded corners. **Content is automatically clipped** to this shape. |
+| `opacity` | `number` | Alpha transparency (0.0 to 1.0). Affects the element and all its children. |
+| `align` | `string` | Alignment for children (`start`, `center`, `end`, `space-between`, `space-evenly`). |
 
-### Text Options
+---
 
-Text elements support advanced typography:
+## Typography
+
+### Text Wrapping
+Provide a `width` to a text element to enable automatic multi-line wrapping.
 
 ```typescript
 {
     type: 'text',
-    content: 'Long paragraph...',
-    options: {
-        font: 'EN',
-        size: 12,
-        width: 300,         // Width constraint for wrapping
-        align: 'justify',   // 'left', 'right', 'center', 'justify'
-        lineHeight: 1.5     // Multiplier (e.g. 1.5x spacing)
+    content: 'Long Kurdish or English paragraph...',
+    options: { 
+        width: 300, 
+        align: 'justify', // Clean edges on both sides
+        lineHeight: 1.5,   // Set spacing between lines
+        rtl: true          // Enable for Kurdish/Arabic
     }
 }
 ```
 
+### Justification
+The library supports native **RTL Justification**. It automatically calculates word spacing to align both the right and left edges of Kurdish/Arabic text blocks.
+
+---
+
 ## Images & Vectors
 
-### PNG & JPEG
-Use `type: 'image'` within a layout:
+### Image Scaling (`objectFit`)
+When placing an image in a fixed-size box, use `objectFit` to control how it scales:
+
+- **`fill` (default)**: Stretches the image to fit exactly.
+- **`contain`**: Scales the image to fit inside without cropping (maintains aspect ratio).
+- **`cover`**: Zooms the image to fill the box entirely, cropping the excess (maintains aspect ratio).
 
 ```typescript
 { 
     type: 'image', 
-    data: pngBytes, 
+    data: myImageBytes, 
     imgType: 'png', 
-    width: 100, 
-    height: 100 
+    width: 200, 
+    height: 100, 
+    options: { objectFit: 'cover' } 
 }
 ```
-*Note: PNG transparency is supported automatically.*
 
-### SVG Vectors
-You can render SVG paths directly using the low-level API:
+### SVG Support
+Render SVG path data as scalable vectors. Original colors from SVG classes (`cls-1`, `cls-2`, etc.) are respected.
 
 ```typescript
-const svgContent = '<svg>...</svg>'; // or path data d="..."
-doc.svg(svgContent, 100, 100, { scale: 0.5, color: '#FF0000' });
+{
+    type: 'svg',
+    content: readFileSync('logo.svg', 'utf-8'),
+    width: 50,
+    height: 50,
+    options: { scale: 1.2 }
+}
 ```
 
-## Examples
+---
 
-Check the `src/` folder for complete examples:
-- `syndicate-id-v2.ts`: Complex ID card with styling.
-- `test-flex.ts`: Demonstrates `zstack` and `space-between`.
-- `test-text-polish.ts`: Demonstrates text justification and wrapping.
+## Advanced Usage
+
+### True Transparency
+Use `doc.setOpacity(alpha)` or the `opacity` option in layouts to create transparent overlays or watermarks.
+
+### Background Watermarks
+To create a watermark, use a `zstack` at the root of your page. Place a faint SVG or Image in the first layer and your content in the subsequent layers.
+
+```typescript
+{
+    type: 'zstack',
+    children: [
+        { type: 'rect', options: { color: '#FFF' } }, // Background
+        { type: 'svg', options: { opacity: 0.1 } },    // Watermark
+        { type: 'vstack', children: [...] }            // Content
+    ]
+}
+```
