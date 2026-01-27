@@ -7,8 +7,9 @@ A lightweight, from-scratch PDF generation library for Node.js/Browser with firs
 - **No heavy dependencies** (Uses `harfbuzzjs` for shaping, otherwise zero-dep).
 - **Unicode Shaping**: Correctly connects Arabic/Kurdish letters and handles RTL direction.
 - **Easy API**: `jsPDF`-like syntax (`doc.text`, `doc.rect`, `doc.image`).
-- **Layout**: Automatic **text wrapping** and **alignment** (Left/Right/Center).
-- **Graphics**: Draw rectangles, custom paths/curves, and embed JPEG images.
+- **Layout**: Automatic **text wrapping**, **alignment** (Left/Right/Center), and **vertical centering** helpers.
+- **Graphics**: Draw rectangles, smooth circular arcs, **clipping masks**, and embed JPEG images.
+- **Precision**: High-precision vector coordinates for professional-grade printing.
 - **Custom Fonts**: Embed any TrueType (.ttf) font.
 
 ## Installation

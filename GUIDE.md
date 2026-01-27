@@ -23,14 +23,35 @@ await doc.init({ width: 243, height: 153 }); // ID Card size in points
 
 ---
 
-## 2. The Coordinate System
+## 2. Advanced Layout Techniques
 
-The library uses the standard PDF coordinate system:
-- **(0,0)** is the **Bottom-Left** corner.
-- **X** increases to the right.
-- **Y** increases upwards.
+### Floating Header Capsule
+To create a modern "floating" header that bleeds off the right edge, use `doc.path` with a large corner radius.
 
-*Tip: When designing an ID card, it's often easier to define variables for `W` (Width) and `H` (Height) and calculate positions relative to them (e.g., `H - 20` for a header).*
+```typescript
+// For a perfect semi-circle, set radius (hR) to half the height (hH)
+const hH = 56, hT = H - 15, hB = hT - hH, hX = 70, hR = 28;
+const hK = hR * 0.5522; // Kappa constant
+
+doc.path([
+    { x: hX + hR, y: hT, type: 'M' },
+    { x: W, y: hT, type: 'L' },
+    { x: W, y: hB, type: 'L' },
+    { x: hX + hR, y: hB, type: 'L' },
+    { x: hX, y: hB + hR, type: 'C', cp1: { x: hX + hR - hK, y: hB }, cp2: { x: hX, y: hB + hR - hK } },
+    { x: hX + hR, y: hT, type: 'C', cp1: { x: hX, y: hB + hR + hK }, cp2: { x: hX + hR - hK, y: hT } }
+], 'F', '#FFFFFF');
+```
+
+### Vertical Centering
+To center a block of text vertically, calculate the center of your area and apply an offset based on the number of lines and font size.
+
+```typescript
+const textCenterY = hB + hR - 3; // Shift slightly for baseline adjustment
+doc.text("Line 1", x, textCenterY + 13, { size: 9 });
+doc.text("Line 2", x, textCenterY, { size: 9 });
+doc.text("Line 3", x, textCenterY - 13, { size: 9 });
+```
 
 ---
 
@@ -42,62 +63,39 @@ To render Kurdish correctly, you must use a font that supports Arabic script and
 When using `doc.text`, follow these rules for Kurdish:
 1. **`font`**: Use your Arabic/Kurdish font key.
 2. **`rtl: true`**: This tells the shaper to handle character joining and bidirectional order.
-3. **`align: 'right'`**: Since Kurdish is read right-to-left, you usually want to align text to the right edge of your bounding box.
+3. **`align: 'right'`**: Since Kurdish is read right-to-left, you usually want to align text to the right edge.
 4. **`width`**: Providing a width enables automatic line wrapping.
 
-```typescript
-doc.text("سەندیکای پزیشکانی ڤێتێرنەری", W - 10, H - 20, { 
-    font: 'AR', 
-    size: 10, 
-    rtl: true, 
-    align: 'right', 
-    width: 170 
-});
-```
+---
+
+## 4. Circular Masking (Clipping)
+
+Since JPEGs do not support transparency, you must use a **Clipping Mask** to create a circular logo without white corners.
+
+### The Masking Workflow
+1.  **Save State**: `doc.saveGraphicsState()`
+2.  **Define Mask**: `doc.clip(points)` (use Bezier arcs for a circle)
+3.  **Draw Background**: `doc.rect()` or `doc.path()`
+4.  **Draw Image**: `doc.image()`
+5.  **Restore State**: `doc.restoreGraphicsState()`
+
+*Crucial: You must restore the state, otherwise the mask will hide content on the rest of the page!*
 
 ---
 
-## 4. Advanced Graphics & Branding
-
-### Drawing Complex Shapes
-The `doc.path` method allows you to create custom shapes using Move (`M`), Line (`L`), and Cubic Bezier Curve (`C`) commands.
-
-**Example: The Wavy Header**
-```typescript
-doc.path([
-    { x: 0, y: H, type: 'M' },        // Move to top-left
-    { x: W, y: H, type: 'L' },        // Line to top-right
-    { x: W, y: H - 40, type: 'L' },   // Line down
-    { x: 0, y: H - 40, type: 'C',     // Curve back to left
-        cp1: { x: W * 0.7, y: H - 65 }, 
-        cp2: { x: W * 0.3, y: H - 65 } 
-    }
-], 'F', '#FFFFFF'); // 'F' for Fill
-```
-
-### Adding Images
-The library supports JPEG images. It automatically detects the original pixel dimensions to ensure high-quality rendering.
-
-```typescript
-doc.image(photoBytes, 'jpeg', x, y, displayWidth, displayHeight);
-```
-
----
-
-## 5. Precise Layout with `measureText`
+## 5. Precise Alignment with `measureText`
 
 If you need to align multiple elements (like a label followed by a value), use `measureText` to calculate exact widths.
 
 ```typescript
 const textWidth = doc.measureText("Label", 10, { font: 'EN' });
-// Now you know exactly where to start the next element!
+// Use this to calculate the starting X for the next element!
 ```
 
 ---
 
 ## 6. Best Practices
 
-1. **Font Choice**: Use Google Fonts like **Noto Sans Arabic** for the best Kurdish rendering.
-2. **Color Contrast**: Use Hex codes (e.g., `#1a237e`) to match brand guidelines.
-3. **Double Sided**: Use `doc.addPage(W, H)` to create double-sided ID cards or multi-page documents.
-4. **Safety First**: Wrap your text blocks in `q` and `Q` (handled automatically by `doc.text`) to ensure font and color settings don't leak between elements.
+1. **High Precision**: The library uses 6-decimal precision for all vector paths to ensure perfectly smooth curves.
+2. **Kappa Constant**: Always use `0.5522` for circular Bezier arcs to avoid "jagged" or segmented edges.
+3. **Double Sided**: Use `doc.addPage(W, H)` to create double-sided ID cards. Content on Page 2 will inherit fonts but has its own independent coordinate state.
