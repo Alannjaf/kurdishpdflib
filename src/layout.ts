@@ -24,7 +24,7 @@ export interface TextElementOptions {
 
 export type LayoutElement = 
     | { type: 'text', content: string, options?: TextElementOptions }
-    | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string } }
+    | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string, opacity?: number } }
     | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number, options?: { align?: 'center' | 'end' | 'start', objectFit?: 'fill' | 'contain' | 'cover' } }
     | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
