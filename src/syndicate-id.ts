@@ -102,11 +102,11 @@ async function main() {
     
     doc.rect(15, 15, 48, 48, 'F', COLOR_BLUE);
 
-    const bR = W - 15; let bY = H - 65;
+    const bkR = W - 15; let bkY = H - 65;
     const bRow = (k: string, a: string, e: string, v: string) => {
-        drawTrilingual(bY, k, a, e, bR, 7, COLOR_LABEL);
-        bY -= 12; doc.text(v, bR - 150, bY, { font: 'EN', size: 11, align: 'right', width: 150, color: COLOR_TEXT_BLUE });
-        bY -= 22;
+        drawTrilingual(bkY, k, a, e, bkR, 7, '#333333'); // Even darker grey (almost black) for labels
+        bkY -= 12; doc.text(v, bkR - 150, bkY, { font: 'EN', size: 11, align: 'right', width: 150, color: COLOR_TEXT_BLUE });
+        bkY -= 22;
     };
     bRow("ژمارەی ناسنامە", "رقم الهوية", "ID. No.", "1137");
     bRow("ڕێکەوتی دەرچوون", "تاريخ الاصدار", "Date of Issue", "07/01/2024");
