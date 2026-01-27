@@ -172,21 +172,39 @@ export class LayoutEngine {
                     const line = lines[i];
                     const isLastLine = i === lines.length - 1;
                     
-                    if (align === 'justify' && !isLastLine && !el.options?.rtl) {
+                    if (align === 'justify' && !isLastLine) {
                         const words = line.trim().split(/\s+/);
                         if (words.length > 1) {
-                            const wordWidths = words.map(w => this.doc.measureText(w, size, { font: el.options?.font }));
+                            const wordWidths = words.map(w => this.doc.measureText(w, size, { font: el.options?.font, rtl: el.options?.rtl }));
                             const totalWordWidth = wordWidths.reduce((a, b) => a + b, 0);
                             const availableSpace = maxWidth - totalWordWidth;
                             const spacePerGap = availableSpace / (words.length - 1);
                             
-                            let wordX = contentX;
-                            for (let j = 0; j < words.length; j++) {
-                                this.doc.text(words[j], wordX, currentY - size, el.options);
-                                wordX += wordWidths[j] + spacePerGap;
+                            if (el.options?.rtl) {
+                                // RTL Justification: Start from Right and move Left
+                                let wordX = contentX + maxWidth;
+                                for (let j = 0; j < words.length; j++) {
+                                    // Logical first word is visually right-most
+                                    const w = wordWidths[j];
+                                    this.doc.text(words[j], wordX - w, currentY - size, el.options);
+                                    wordX -= (w + spacePerGap);
+                                }
+                            } else {
+                                // LTR Justification
+                                let wordX = contentX;
+                                for (let j = 0; j < words.length; j++) {
+                                    this.doc.text(words[j], wordX, currentY - size, el.options);
+                                    wordX += wordWidths[j] + spacePerGap;
+                                }
                             }
                         } else {
-                            this.doc.text(line, contentX, currentY - size, el.options);
+                             // Single word line fallback
+                             if (el.options?.rtl) {
+                                 const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: true });
+                                 this.doc.text(line, contentX + maxWidth - lineWidth, currentY - size, el.options);
+                             } else {
+                                 this.doc.text(line, contentX, currentY - size, el.options);
+                             }
                         }
                     } else if (align === 'center') {
                         const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: el.options?.rtl });

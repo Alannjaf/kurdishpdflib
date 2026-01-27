@@ -82,7 +82,7 @@ async function main() {
                             {
                                 type: 'text',
                                 content: "ئەم بەشە توانای کتێبخانەکە نیشان دەدات بۆ مامەڵەکردن لەگەڵ دەقی کوردی. تێبینی بکە چۆن وشەکان دابەش کراون بۆ ئەوەی پەراوێزەکان ڕێک بوەستن. ئەمەش شێوازێکی پرۆفیشناڵ دەبەخشێت بە بەڵگەنامەکە.",
-                                options: { font: 'AR', size: 11, width: 240, align: 'right', rtl: true, lineHeight: 1.6 }
+                                options: { font: 'AR', size: 11, width: 240, align: 'justify', rtl: true, lineHeight: 1.6 }
                             }
                         ]
                     }
