@@ -124,27 +124,27 @@ async function main() {
                                 type: 'box',
                                 options: { 
                                     width: 150, 
-                                    height: 150, 
+                                    height: 100, // Rectangular container
                                     backgroundColor: 'white', 
                                     borderWidth: 4, 
                                     borderColor: COL_PRIMARY, 
                                     borderRadius: 15, 
                                     align: 'center'
                                 },
-                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 150, options: { objectFit: 'cover' } }
+                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 100, options: { objectFit: 'cover' } }
                             },
                             // Contain Example
                             {
                                 type: 'box',
                                 options: { 
                                     width: 150, 
-                                    height: 150, 
+                                    height: 100, // Rectangular container
                                     backgroundColor: '#bdc3c7', 
                                     borderWidth: 2, 
                                     borderColor: '#333', 
                                     align: 'center'
                                 },
-                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 150, options: { objectFit: 'contain' } }
+                                child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 150, height: 100, options: { objectFit: 'contain' } }
                             }
                         ]
                     }
