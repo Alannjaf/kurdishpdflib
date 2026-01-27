@@ -172,51 +172,8 @@ export class LayoutEngine {
                     const line = lines[i];
                     const isLastLine = i === lines.length - 1;
                     
-                    if (align === 'justify' && !isLastLine) {
-                        const words = line.trim().split(/\s+/);
-                        if (words.length > 1) {
-                            const wordWidths = words.map(w => this.doc.measureText(w, size, { font: el.options?.font, rtl: el.options?.rtl }));
-                            const totalWordWidth = wordWidths.reduce((a, b) => a + b, 0);
-                            const availableSpace = maxWidth - totalWordWidth;
-                            const spacePerGap = availableSpace / (words.length - 1);
-                            
-                            if (el.options?.rtl) {
-                                // RTL Justification: Start from Right and move Left
-                                let wordX = contentX + maxWidth;
-                                for (let j = 0; j < words.length; j++) {
-                                    // Logical first word is visually right-most
-                                    const w = wordWidths[j];
-                                    this.doc.text(words[j], wordX - w, currentY - size, el.options);
-                                    wordX -= (w + spacePerGap);
-                                }
-                            } else {
-                                // LTR Justification
-                                let wordX = contentX;
-                                for (let j = 0; j < words.length; j++) {
-                                    this.doc.text(words[j], wordX, currentY - size, el.options);
-                                    wordX += wordWidths[j] + spacePerGap;
-                                }
-                            }
-                        } else {
-                             // Single word line fallback
-                             if (el.options?.rtl) {
-                                 const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: true });
-                                 this.doc.text(line, contentX + maxWidth - lineWidth, currentY - size, el.options);
-                             } else {
-                                 this.doc.text(line, contentX, currentY - size, el.options);
-                             }
-                        }
-                    } else if (align === 'center') {
-                        const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: el.options?.rtl });
-                        const centerOffset = (maxWidth - lineWidth) / 2;
-                        this.doc.text(line, contentX + centerOffset, currentY - size, el.options);
-                    } else if (align === 'right' || (el.options?.rtl && align !== 'left')) {
-                         const lineWidth = this.doc.measureText(line, size, { font: el.options?.font, rtl: el.options?.rtl });
-                         const rightOffset = maxWidth - lineWidth;
-                         this.doc.text(line, contentX + rightOffset, currentY - size, el.options);
-                    } else {
-                        this.doc.text(line, contentX, currentY - size, el.options);
-                    }
+                    // Call doc.text with the alignment. Core doc.text now handles justification and Bidi reordering.
+                    this.doc.text(line, contentX, currentY, { ...el.options, align: isLastLine && align === 'justify' ? (el.options?.rtl ? 'right' : 'left') : align });
                     currentY -= lineHeight;
                 }
             } else {

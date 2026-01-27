@@ -17,6 +17,7 @@ export interface ShapedGlyph {
 
 export interface DrawShapedRunOptions {
   x: number; y: number; size?: number; font?: string; rtl?: boolean; color?: [number, number, number];
+  wordSpacing?: number;
 }
 
 export interface DrawImageOptions {
@@ -128,8 +129,6 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
       const { points, close, fill = true, stroke = false, clip = false, color, strokeColor, strokeWidth = 1 } = opts;
       if (points.length === 0) return;
       
-      // If clipping, the user MUST wrap this in save/restoreGraphicsState
-      // to avoid corrupting the stack for other pages/elements.
       if (!clip) push('q\n'); 
       
       if (strokeWidth !== 1) push(`${strokeWidth} w\n`);
@@ -176,7 +175,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           push(`/${refName} sh\n`);
       },
       drawShapedRun: (shaped, opts) => {
-          const { x, y, size = 12, font = 'F1', rtl = false, color } = opts;
+          const { x, y, size = 12, font = 'F1', rtl = false, color, wordSpacing = 0 } = opts;
           const info = fonts[font];
           if (!info || !info.metrics) return;
           const scale = size / info.metrics.unitsPerEm;
@@ -188,6 +187,12 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           const glyphsWithPos = shaped.map(g => {
               const tx = cx + (g.xOffset ?? 0) * scale, ty = cy + (g.yOffset ?? 0) * scale;
               cx += scale * g.xAdvance; cy += scale * g.yAdvance;
+              
+              // Apply word spacing if this glyph represents a space
+              if (g.unicode === ' ') {
+                  cx += wordSpacing;
+              }
+              
               return { g, tx, ty };
           });
           if (rtl) glyphsWithPos.reverse();
