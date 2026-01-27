@@ -28,9 +28,6 @@ export class KurdPDF {
      * Must be called before adding text.
      */
     async init(initialPage?: { width: number, height: number }) {
-        // Based on working example.ts:
-        // const hb = (await (await import('harfbuzzjs')).default) as Hb;
-        
         const hbModule = await import('harfbuzzjs');
         // @ts-ignore
         const hbInstance = await hbModule.default;
@@ -63,9 +60,6 @@ export class KurdPDF {
         return this;
     }
 
-    /**
-     * Measure the width of a text string with the given font and size.
-     */
     measureText(text: string, size: number, options: { font?: string, rtl?: boolean } = {}): number {
         const fontKey = options.font || this.defaultFont || 'F1';
         const rtl = options.rtl ?? false;
@@ -76,24 +70,14 @@ export class KurdPDF {
         }
 
         const fontBytes = this.fonts[fontKey].fontBytes;
-        
-        // Get UPM
         const foundUPM = this.shaper.getUPM(fontBytes);
-        const UPM = foundUPM || 1000; // Default to 1000 if not found (standard for CFF, TrueType often 2048)
-        
+        const UPM = foundUPM || 1000; 
         const scale = size / UPM;
-        
         const shaped = this.shaper.shape(fontBytes, text, { rtl });
         const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
-        
         return totalAdvance * scale;
     }
 
-    /**
-     * Add text to the current page.
-     * Automatically handles shaping if the font is loaded.
-     * Supports automatic line wrapping if options.width is provided.
-     */
     text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center', color?: string } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
         
@@ -102,7 +86,6 @@ export class KurdPDF {
         const rtl = options.rtl ?? false;
         const maxWidth = options.width;
         
-        // Parse color
         const parseColor = (c?: string): [number, number, number] | undefined => {
              if (!c) return undefined;
              if (c.startsWith('#')) {
@@ -115,13 +98,11 @@ export class KurdPDF {
         };
         const color = parseColor(options.color);
         
-        // If width is provided, we need to wrap text
         if (maxWidth && maxWidth > 0) {
             this.drawWrappedText(text, x, y, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color);
         } else {
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
         }
-        
         return this;
     }
 
@@ -137,7 +118,6 @@ export class KurdPDF {
 
     private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center', color?: [number, number, number]) {
         if (!this.fonts[fontKey] || !this.shaper) {
-            // Fallback for standard fonts (approximate wrapping)
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
             return;
         }
@@ -146,15 +126,12 @@ export class KurdPDF {
         const words = text.split(' ');
         let currentLine: string[] = [];
         let currentY = y;
-        const lineHeight = size * 1.4; // Slightly increased leading
+        const lineHeight = size * 1.4; 
 
-        // We need real metrics to wrap correctly. 
         const foundUPM = this.shaper!.getUPM(fontBytes);
         const UPM = foundUPM || 2048; 
-        // console.log(`Debug: Font ${fontKey} UPM=${foundUPM}, using ${UPM}`);
         const scale = size / UPM;
         
-        // Helper to measure width of a string using the shaper
         const measure = (s: string) => {
             const shaped = this.shaper!.shape(fontBytes, s, { rtl });
             const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
@@ -166,7 +143,6 @@ export class KurdPDF {
             const width = measure(testLine) * scale;
             
             if (width > maxWidth && currentLine.length > 0) {
-                // Draw current line
                 const lineStr = currentLine.join(' ');
                 this.drawLineAligned(lineStr, x, currentY, maxWidth, size, fontKey, rtl, align, scale, measure, color);
                 currentY -= lineHeight;
@@ -193,16 +169,8 @@ export class KurdPDF {
         this.drawSingleLine(text, drawX, y, size, fontKey, rtl, color);
     }
 
-    /**
-     * Draw a rectangle.
-     */
     rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
         if (!this.currentPage) throw new Error("No page exists.");
-        
-        // Naive hex/name to RGB parser or assume array for now.
-        // Let's accept hex string "#RRGGBB" or array.
-        // For simplicity, let's keep it abstract in this demo or implement a tiny parser.
-        // Let's just assume simple RGB array input or implement hex parsing.
         
         const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
              if (!c) return undefined;
@@ -223,16 +191,12 @@ export class KurdPDF {
             fill: style.includes('F'),
             stroke: style.includes('S'),
             color: style.includes('F') ? rgb : undefined,
-            strokeColor: style.includes('S') ? rgb : undefined, // Simplification: stroke same as fill color if provided
+            strokeColor: style.includes('S') ? rgb : undefined, 
         });
         return this;
     }
 
-    /**
-     * Draw a custom path (lines and curves).
-     * Useful for complex shapes.
-     */
-    path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' = 'S', color?: string) {
+    path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string) {
          if (!this.currentPage) throw new Error("No page exists.");
 
          const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
@@ -249,9 +213,14 @@ export class KurdPDF {
         
         const rgb = parseColor(color);
 
+        if (style === 'N') {
+             this.currentPage.drawPath({ points, close: true, clip: true }); 
+             return this;
+        }
+
         this.currentPage.drawPath({
             points,
-            close: true, // Usually we close shapes
+            close: true, 
             fill: style.includes('F'),
             stroke: style.includes('S'),
             color: style.includes('F') ? rgb : undefined,
@@ -272,22 +241,20 @@ export class KurdPDF {
         return this;
     }
 
-    /**
-     * Set a custom path as the clipping area.
-     */
-    clip(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[]) {
+    clip(points?: any[]) {
         if (!this.currentPage) throw new Error("No page exists.");
-        this.currentPage.drawPath({
-            points,
-            close: true,
-            clip: true
-        });
+        if (points) {
+            this.currentPage.drawPath({
+                points,
+                close: true,
+                clip: true
+            });
+        } else {
+            this.currentPage.clip();
+        }
         return this;
     }
 
-    /**
-     * Draw a smooth circle using 8-segment high-precision Bezier arcs.
-     */
     circle(cx: number, cy: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
          if (!this.currentPage) throw new Error("No page exists.");
          
@@ -315,10 +282,7 @@ export class KurdPDF {
          return this;
     }
 
-    /**
-     * Draw a rounded rectangle with smooth high-precision arcs.
-     */
-    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
+    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const k = 0.552284749831;
@@ -330,33 +294,25 @@ export class KurdPDF {
             { x: x + w, y: y + h - r, type: 'L' },
             { x: x + w - r, y: y + h, type: 'C', cp1: {x: x + w, y: y + h - r + kr}, cp2: {x: x + w - r + kr, y: y + h} },
             { x: x + r, y: y + h, type: 'L' },
-            { x: x, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x, y: y + h - r + kr} },
+            { x: x + r, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x + r - kr, y: y + h} },
             { x: x, y: y + r, type: 'L' },
             { x: x + r, y: y, type: 'C', cp1: {x: x, y: y + r - kr}, cp2: {x: x + r - kr, y: y} }
         ] as any;
 
-        this.path(points, style, color);
+        if (style === 'N') {
+            this.clip(points);
+        } else {
+            this.path(points, style, color);
+        }
         return this;
     }
 
-    /**
-     * Add an image to the document and draw it.
-     * @param data Raw image bytes
-     * @param type 'jpeg' or 'png'
-     * @param x X position
-     * @param y Y position
-     * @param w Display width
-     * @param h Display height
-     * @param originalWidth Original image width in pixels (optional, auto-extracted for JPEG)
-     * @param originalHeight Original image height in pixels (optional, auto-extracted for JPEG)
-     */
     image(data: Uint8Array, type: 'jpeg' | 'png', x: number, y: number, w: number, h: number, originalWidth?: number, originalHeight?: number) {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
         
         let pxW = originalWidth;
         let pxH = originalHeight;
 
-        // Auto-extract JPEG dimensions if not provided
         if (type === 'jpeg' && (!pxW || !pxH)) {
             try {
                 let pos = 2; // skip FFD8
@@ -365,7 +321,7 @@ export class KurdPDF {
                     const marker = data[pos + 1];
                     const len = (data[pos + 2] << 8) | data[pos + 3];
                     
-                    if (marker >= 0xC0 && marker <= 0xC3) { // SOF0, SOF1, SOF2, SOF3
+                    if (marker >= 0xC0 && marker <= 0xC3) {
                         pxH = (data[pos + 5] << 8) | data[pos + 6];
                         pxW = (data[pos + 7] << 8) | data[pos + 8];
                         break;
@@ -393,13 +349,9 @@ export class KurdPDF {
         return this;
     }
 
-    /**
-     * Draw an image masked by a circle.
-     */
     maskedCircleImage(data: Uint8Array, type: 'jpeg' | 'png', cx: number, cy: number, r: number) {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
         
-        // 1. Get circle points
         const k = 0.552284749831;
         const kr = r * k;
         const points = [
@@ -421,10 +373,6 @@ export class KurdPDF {
         return this;
     }
 
-    /**
-     * Draw a trilingual line (Kurdish/Arabic/English) with automatic font switching.
-     * Prevents empty boxes by using the 'AR' font for script and 'EN' for Latin/Slashes.
-     */
     trilingualLine(y: number, krd: string, ar: string, en: string, rightEdge: number, fontSize: number, color: string, arFont = 'AR', enFont = 'EN') {
         if (!this.currentPage) throw new Error("No page exists.");
         
@@ -449,14 +397,7 @@ export class KurdPDF {
         return this;
     }
 
-    /**
-     * Render an SVG path string.
-     * @param svgContent The SVG string (or just the path data d="...")
-     * @param x X position
-     * @param y Y position
-     * @param options Scale and color options
-     */
-    svg(svgContent: string, x: number, y: number, options: { scale?: number } = {}) {
+    svg(svgContent: string, x: number, y: number, options: { scale?: number, color?: string, style?: 'F'|'S'|'FD' } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const scale = options.scale || 1.0;
@@ -467,14 +408,24 @@ export class KurdPDF {
             const transformedPoints = path.points.map(p => ({
                 ...p,
                 x: x + p.x * scale,
-                y: y + p.y * scale, 
-                cp1: p.cp1 ? { x: x + p.cp1.x * scale, y: y + p.cp1.y * scale } : undefined,
-                cp2: p.cp2 ? { x: x + p.cp2.x * scale, y: y + p.cp2.y * scale } : undefined
+                // Flip Y axis for SVG (SVG y goes down, PDF y goes up)
+                // We subtract the scaled Y from the starting Y position
+                y: y - p.y * scale, 
+                cp1: p.cp1 ? { x: x + p.cp1.x * scale, y: y - p.cp1.y * scale } : undefined,
+                cp2: p.cp2 ? { x: x + p.cp2.x * scale, y: y - p.cp2.y * scale } : undefined
             }));
 
             // Use the path's specific color if available
-            this.path(transformedPoints, 'F', path.color);
+            this.path(transformedPoints, 'F', options.color || path.color);
         }
+        return this;
+    }
+
+    setOpacity(opacity: number) {
+        if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
+        const gs = this.doc.getOpacityGState(opacity);
+        this.currentPage.addExtGStateResource(gs.name, gs.ref);
+        this.currentPage.setOpacity(gs.name);
         return this;
     }
 

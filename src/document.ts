@@ -29,6 +29,7 @@ export interface PDFDocument {
   addPage(width: number, height: number): Page;
   addImage(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number): string;
   getImageRef(id: string): PdfRef | undefined;
+  getOpacityGState(opacity: number): { name: string, ref: PdfRef };
   save(): Uint8Array;
 }
 
@@ -56,7 +57,9 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
   const pages: Page[] = [];
   const embeddedFonts: Record<string, EmbeddedFont & { usedGidToUnicode: [number, string][] }> = {};
   const embeddedImages: Record<string, PdfRef> = {};
+  const extGStates: Record<string, PdfRef> = {};
   let imageCount = 0;
+  let gsCount = 0;
 
   // Handle fonts
   const fontConfigs = opts.fonts ?? {};
@@ -79,7 +82,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
           usedGidToUnicode: val.usedGidToUnicode,
         };
       }
-      const page = createPage(width, height, w, pagesRef, pageRefs, { fonts, images: embeddedImages });
+      const page = createPage(width, height, w, pagesRef, pageRefs, { fonts, images: embeddedImages, extGStates });
       pages.push(page);
       return page;
     },
@@ -115,6 +118,15 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     },
     getImageRef(id: string): PdfRef | undefined {
         return embeddedImages[id];
+    },
+    getOpacityGState(opacity: number): { name: string, ref: PdfRef } {
+        const key = 'GS' + Math.round(opacity * 100);
+        if (!extGStates[key]) {
+            gsCount++;
+            const ref = w.addExtGState(opacity);
+            extGStates[key] = ref;
+        }
+        return { name: key, ref: extGStates[key] };
     },
     save(): Uint8Array {
       for (const p of pages) finalizePageContent(p, w);

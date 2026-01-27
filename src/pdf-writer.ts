@@ -103,6 +103,15 @@ export class PdfWriter {
     return { id, gen: 0 };
   }
 
+  addExtGState(opacity: number): PdfRef {
+      const dict = {
+          Type: name('ExtGState'),
+          ca: opacity, // Non-stroking alpha (fill)
+          CA: opacity  // Stroking alpha (stroke)
+      };
+      return this.addDict(dict);
+  }
+
   addImageXObject(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number, options: { smask?: PdfRef } = {}): PdfRef {
       const dict: Record<string, unknown> = {
           Type: name('XObject'),

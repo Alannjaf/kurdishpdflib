@@ -9,6 +9,7 @@ export interface LayoutOptions {
     borderColor?: string;
     borderWidth?: number;
     borderRadius?: number;
+    opacity?: number;
 }
 
 export interface TextElementOptions {
@@ -25,6 +26,7 @@ export type LayoutElement =
     | { type: 'text', content: string, options?: TextElementOptions }
     | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string } }
     | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number }
+    | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
     | { type: 'box', child: LayoutElement, options?: LayoutOptions }
     | { type: 'spacer', size: number };
@@ -77,6 +79,9 @@ export class LayoutEngine {
         } else if (el.type === 'rect' || el.type === 'image') {
             w = el.width;
             h = el.height;
+        } else if (el.type === 'svg') {
+            w = el.width;
+            h = el.height;
         } else if (el.type === 'spacer') {
             w = el.size;
             h = el.size;
@@ -125,13 +130,26 @@ export class LayoutEngine {
         const innerW = w - m.left - m.right;
         const innerH = h - m.top - m.bottom;
 
+        // Apply Opacity
+        if (options.opacity !== undefined) {
+            this.doc.setOpacity(options.opacity);
+        }
+
         // Draw Background and Border
         if (options.backgroundColor || (options.borderColor && options.borderWidth)) {
             const style = options.backgroundColor && options.borderColor ? 'FD' : (options.backgroundColor ? 'F' : 'S');
             
-            if (options.borderRadius && this.doc.roundedRect) {
-                this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor || options.borderColor);
-                // Note: simplified color logic, assuming single color for both or doc handles it
+            // If borderRadius is set, we need to clip the child content to this shape!
+            if (options.borderRadius) {
+                this.doc.saveGraphicsState();
+                // Draw the shape for background/border
+                if (this.doc.roundedRect) {
+                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor || options.borderColor);
+                    
+                    // Create clipping path for child
+                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); // 'N' = No paint, just path
+                    this.doc.clip(); // Apply clip
+                }
             } else {
                 this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor || options.borderColor);
             }
@@ -195,6 +213,12 @@ export class LayoutEngine {
             this.doc.rect(contentX, contentY - contentH, contentW, contentH, el.options?.style, el.options?.color);
         } else if (el.type === 'image') {
             this.doc.image(el.data, el.imgType, contentX, contentY - contentH, contentW, contentH);
+        } else if (el.type === 'svg') {
+            // Pass contentY (TOP edge) because svg() draws downwards (y - p.y)
+            this.doc.svg(el.content, contentX, contentY, { 
+                scale: el.options?.scale, 
+                color: el.options?.color 
+            });
         } else if (el.type === 'vstack') {
             const childrenSizes = el.children.map(c => this.calculateSize(c));
             
@@ -279,7 +303,29 @@ export class LayoutEngine {
             }
         } else if (el.type === 'box') {
             const size = this.calculateSize(el.child);
-            this.drawElement(el.child, contentX, contentY, size.width, size.height);
+            // Handle box alignment
+            let childX = contentX;
+            let childY = contentY;
+            
+            // If the box is larger than the child (due to fixed width/height), align the child
+            if (options.align === 'center') {
+                childX += (contentW - size.width) / 2;
+                // childY -= (contentH - size.height) / 2; // Vertical center? LayoutEngine usually top-down
+            } else if (options.align === 'end') {
+                childX += contentW - size.width;
+            }
+            
+            this.drawElement(el.child, childX, childY, size.width, size.height);
+        }
+        
+        // Restore graphics state if we clipped
+        if (options.borderRadius) {
+            this.doc.restoreGraphicsState();
+        }
+        
+        // Reset Opacity
+        if (options.opacity !== undefined) {
+            this.doc.setOpacity(1.0);
         }
     }
 

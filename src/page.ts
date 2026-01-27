@@ -42,18 +42,21 @@ export interface Page {
   drawPath(options: DrawPathOptions): void;
   saveGraphicsState(): void;
   restoreGraphicsState(): void;
+  clip(): void;
+  setOpacity(refName: string): void;
   addImageResource(name: string, ref: PdfRef): void;
+  addExtGStateResource(name: string, ref: PdfRef): void;
 }
 
 export interface FontInfo { fontRef: PdfRef; metrics?: FontMetrics; usedGidToUnicode?: [number, string][]; }
 
-export interface CreatePageOptions { fonts?: Record<string, FontInfo>; images?: Record<string, PdfRef>; }
+export interface CreatePageOptions { fonts?: Record<string, FontInfo>; images?: Record<string, PdfRef>; extGStates?: Record<string, PdfRef>; }
 
 const encoder = new TextEncoder();
 function encodeStr(s: string): Uint8Array { return encoder.encode(s); }
 
 export function createPage(width: number, height: number, w: PdfWriter, pagesRef: PdfRef, pageRefs: PdfRef[], options: CreatePageOptions = {}): Page {
-  const { fonts = {}, images = {} } = options;
+  const { fonts = {}, images = {}, extGStates = {} } = options;
   const contentChunks: Uint8Array[] = [];
   const push = (s: string) => contentChunks.push(encodeStr(s));
 
@@ -61,6 +64,8 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   for (const [key, info] of Object.entries(fonts)) fontDict[key] = info.fontRef;
   const xObjectDict: Record<string, unknown> = {};
   for (const [key, ref] of Object.entries(images)) xObjectDict[key] = ref;
+  const extGStateDict: Record<string, unknown> = {};
+  for (const [key, ref] of Object.entries(extGStates)) extGStateDict[key] = ref;
 
   if (Object.keys(fontDict).length === 0) {
     fontDict.F1 = w.addDict({ Type: name('Font'), Subtype: name('Type1'), BaseFont: name('Helvetica') });
@@ -69,7 +74,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   const pageDict = w.addDict({
     Type: name('Page'), Parent: pagesRef, MediaBox: [0, 0, width, height],
     Contents: null as unknown as PdfRef,
-    Resources: { Font: fontDict, XObject: xObjectDict },
+    Resources: { Font: fontDict, XObject: xObjectDict, ExtGState: extGStateDict },
   });
 
   const contentsRef = w.addStream({}, new Uint8Array(0));
@@ -157,7 +162,11 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
 
   const page: Page = {
       drawText, drawRect, drawImage, drawPath, addImageResource: (n, r) => { xObjectDict[n] = r; },
-      saveGraphicsState: () => push('q\n'), restoreGraphicsState: () => push('Q\n'),
+      addExtGStateResource: (n, r) => { extGStateDict[n] = r; },
+      saveGraphicsState: () => push('q\n'), restoreGraphicsState: () => push('Q\n'), clip: () => push('W n\n'),
+      setOpacity: (refName) => {
+          push(`/${refName} gs\n`);
+      },
       drawShapedRun: (shaped, opts) => {
           const { x, y, size = 12, font = 'F1', rtl = false, color } = opts;
           const info = fonts[font];
