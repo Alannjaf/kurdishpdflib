@@ -112,6 +112,30 @@ export class PdfWriter {
       return this.addDict(dict);
   }
 
+  addAxialShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): PdfRef {
+      // 1. Create a function for the interpolation
+      // For simplicity, we'll support a simple linear interpolation between two colors for now.
+      // A more robust implementation would use a Type 3 (Stitching) function for multiple stops.
+      
+      const functionRef = this.addDict({
+          FunctionType: 2, // Exponential interpolation
+          Domain: [0, 1],
+          C0: colors[0].color,
+          C1: colors[1].color,
+          N: 1 // Linear
+      });
+
+      const shadingDict = {
+          ShadingType: 2, // Axial
+          ColorSpace: name('DeviceRGB'),
+          Coords: coords, // [x0, y0, x1, y1]
+          Function: functionRef,
+          Extend: [true, true]
+      };
+
+      return this.addDict(shadingDict);
+  }
+
   addImageXObject(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number, options: { smask?: PdfRef } = {}): PdfRef {
       const dict: Record<string, unknown> = {
           Type: name('XObject'),

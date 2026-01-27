@@ -30,6 +30,7 @@ export interface PDFDocument {
   addImage(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number): string;
   getImageRef(id: string): PdfRef | undefined;
   getOpacityGState(opacity: number): { name: string, ref: PdfRef };
+  addShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): { name: string, ref: PdfRef };
   save(): Uint8Array;
 }
 
@@ -58,8 +59,10 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
   const embeddedFonts: Record<string, EmbeddedFont & { usedGidToUnicode: [number, string][] }> = {};
   const embeddedImages: Record<string, PdfRef> = {};
   const extGStates: Record<string, PdfRef> = {};
+  const shadingRefs: Record<string, PdfRef> = {};
   let imageCount = 0;
   let gsCount = 0;
+  let shadingCount = 0;
 
   // Handle fonts
   const fontConfigs = opts.fonts ?? {};
@@ -82,7 +85,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
           usedGidToUnicode: val.usedGidToUnicode,
         };
       }
-      const page = createPage(width, height, w, pagesRef, pageRefs, { fonts, images: embeddedImages, extGStates });
+      const page = createPage(width, height, w, pagesRef, pageRefs, { fonts, images: embeddedImages, extGStates, shading: shadingRefs });
       pages.push(page);
       return page;
     },
@@ -127,6 +130,13 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
             extGStates[key] = ref;
         }
         return { name: key, ref: extGStates[key] };
+    },
+    addShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): { name: string, ref: PdfRef } {
+        shadingCount++;
+        const id = 'SH' + shadingCount;
+        const ref = w.addAxialShading(colors, coords);
+        shadingRefs[id] = ref;
+        return { name: id, ref };
     },
     save(): Uint8Array {
       for (const p of pages) finalizePageContent(p, w);

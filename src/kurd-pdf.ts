@@ -7,6 +7,7 @@ import { parsePNG } from './png.js';
 
 export interface KurdPDFOptions {
     fonts?: Record<string, { fontBytes: Uint8Array, baseFontName: string }>;
+    fallbackOrder?: string[];
 }
 
 export class KurdPDF {
@@ -15,10 +16,12 @@ export class KurdPDF {
     private shaper: TextShaper | null = null;
     private fonts: Record<string, { fontBytes: Uint8Array, baseFontName: string }> = {};
     private defaultFont: string | null = null;
+    private fallbackOrder: string[] = [];
 
     constructor(options: KurdPDFOptions = {}) {
         this.fonts = options.fonts || {};
         const fontKeys = Object.keys(this.fonts);
+        this.fallbackOrder = options.fallbackOrder || fontKeys;
         if (fontKeys.length > 0) {
             this.defaultFont = fontKeys[0];
         }
@@ -61,7 +64,61 @@ export class KurdPDF {
         return this;
     }
 
+    private getBestFontForChar(char: string): string {
+        if (!this.shaper) return this.defaultFont || 'F1';
+        
+        for (const fontKey of this.fallbackOrder) {
+            const font = this.fonts[fontKey];
+            if (!font) continue;
+            // Check if glyph exists (GID > 0)
+            const gid = this.shaper.getGlyphIndex(font.fontBytes, char.codePointAt(0)!);
+            if (gid > 0) return fontKey;
+        }
+        return this.defaultFont || 'F1';
+    }
+
+    private splitIntoRuns(text: string): { font: string, text: string, isRtl: boolean }[] {
+        if (text.length === 0) return [];
+        
+        const runs: { font: string, text: string, isRtl: boolean }[] = [];
+        let currentFont = this.getBestFontForChar(text[0]);
+        let currentText = text[0];
+        
+        const isRtlChar = (char: string) => {
+            const code = char.codePointAt(0)!;
+            return (code >= 0x0600 && code <= 0x06FF) || (code >= 0x0750 && code <= 0x077F) || (code >= 0x08A0 && code <= 0x08FF) || (code >= 0xFB50 && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF);
+        };
+
+        for (let i = 1; i < text.length; i++) {
+            const char = text[i];
+            const font = this.getBestFontForChar(char);
+            
+            if (char === ' ' || char === '\n' || char === '\r' || char === '\t') {
+                currentText += char;
+                continue;
+            }
+
+            if (font !== currentFont) {
+                runs.push({ font: currentFont, text: currentText, isRtl: isRtlChar(currentText.trim()[0] || ' ') });
+                currentFont = font;
+                currentText = char;
+            } else {
+                currentText += char;
+            }
+        }
+        runs.push({ font: currentFont, text: currentText, isRtl: isRtlChar(currentText.trim()[0] || ' ') });
+        return runs;
+    }
+
+    /**
+     * Measure the width of a text string with the given font and size.
+     */
     measureText(text: string, size: number, options: { font?: string, rtl?: boolean } = {}): number {
+        if (!options.font) {
+            const runs = this.splitIntoRuns(text);
+            return runs.reduce((acc, run) => acc + this.measureText(run.text, size, { font: run.font, rtl: run.isRtl }), 0);
+        }
+
         const fontKey = options.font || this.defaultFont || 'F1';
         const rtl = options.rtl ?? false;
 
@@ -79,25 +136,34 @@ export class KurdPDF {
         return totalAdvance * scale;
     }
 
-    text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center', color?: string } = {}) {
+    /**
+     * Add text to the current page.
+     * Automatically handles shaping if the font is loaded.
+     * Supports automatic line wrapping if options.width is provided.
+     */
+    text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center' | 'justify', color?: string } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
         
-        const fontKey = options.font || this.defaultFont || 'F1';
         const size = options.size || 12;
-        const rtl = options.rtl ?? false;
         const maxWidth = options.width;
-        
-        const parseColor = (c?: string): [number, number, number] | undefined => {
-             if (!c) return undefined;
-             if (c.startsWith('#')) {
-                 const r = parseInt(c.slice(1, 3), 16) / 255;
-                 const g = parseInt(c.slice(3, 5), 16) / 255;
-                 const b = parseInt(c.slice(5, 7), 16) / 255;
-                 return [r, g, b];
-             }
-             return undefined;
-        };
-        const color = parseColor(options.color);
+        const color = this.parseColorHex(options.color);
+
+        if (!options.font) {
+            if (maxWidth && maxWidth > 0) {
+                 this.drawWrappedTextFallback(text, x, y, maxWidth, size, options.align || 'left', options.color);
+            } else {
+                 const runs = this.splitIntoRuns(text);
+                 let currentX = x;
+                 for (const run of runs) {
+                     this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color);
+                     currentX += this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                 }
+            }
+            return this;
+        }
+
+        const fontKey = options.font;
+        const rtl = options.rtl ?? false;
         
         if (maxWidth && maxWidth > 0) {
             this.drawWrappedText(text, x, y, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color);
@@ -105,6 +171,54 @@ export class KurdPDF {
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
         }
         return this;
+    }
+
+    private parseColorHex(c?: string): [number, number, number] | undefined {
+         if (!c) return undefined;
+         if (c.startsWith('#')) {
+             const r = parseInt(c.slice(1, 3), 16) / 255;
+             const g = parseInt(c.slice(3, 5), 16) / 255;
+             const b = parseInt(c.slice(5, 7), 16) / 255;
+             return [r, g, b];
+         }
+         return undefined;
+    }
+
+    private drawWrappedTextFallback(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string) {
+        const words = text.split(' ');
+        let currentLine: string[] = [];
+        let currentY = y;
+        const lineHeight = size * 1.4;
+
+        for (const word of words) {
+            const testLine = [...currentLine, word].join(' ');
+            const width = this.measureText(testLine, size);
+            
+            if (width > maxWidth && currentLine.length > 0) {
+                this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color);
+                currentY -= lineHeight;
+                currentLine = [word];
+            } else {
+                currentLine.push(word);
+            }
+        }
+        if (currentLine.length > 0) {
+            this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color);
+        }
+    }
+
+    private drawRunsAligned(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string) {
+        const width = this.measureText(text, size);
+        let drawX = x;
+        if (align === 'center') drawX += (maxWidth - width) / 2;
+        else if (align === 'right') drawX += (maxWidth - width);
+        
+        const runs = this.splitIntoRuns(text);
+        let currentX = drawX;
+        for (const run of runs) {
+            this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, this.parseColorHex(color));
+            currentX += this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+        }
     }
 
     private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number]) {
@@ -117,7 +231,7 @@ export class KurdPDF {
         }
     }
 
-    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center', color?: [number, number, number]) {
+    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number]) {
         if (!this.fonts[fontKey] || !this.shaper) {
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
             return;
@@ -170,7 +284,7 @@ export class KurdPDF {
         this.drawSingleLine(text, drawX, y, size, fontKey, rtl, color);
     }
 
-    rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' = 'S', color?: string, lineWidth?: number) {
+    rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
@@ -186,6 +300,11 @@ export class KurdPDF {
         };
         
         const rgb = parseColor(color);
+
+        if (style === 'N') {
+            this.currentPage.drawRect({ x, y, width: w, height: h, fill: false, stroke: false });
+            return this;
+        }
         
         this.currentPage.drawRect({
             x, y, width: w, height: h,
@@ -418,19 +537,34 @@ export class KurdPDF {
         const paths = parseSVG(svgContent);
         
         for (const path of paths) {
-            const transformedPoints = path.points.map(p => ({
+            const transformedPoints = path.points.map((p: any) => ({
                 ...p,
                 x: x + p.x * scale,
-                // Flip Y axis for SVG (SVG y goes down, PDF y goes up)
-                // We subtract the scaled Y from the starting Y position
                 y: y - p.y * scale, 
                 cp1: p.cp1 ? { x: x + p.cp1.x * scale, y: y - p.cp1.y * scale } : undefined,
                 cp2: p.cp2 ? { x: x + p.cp2.x * scale, y: y - p.cp2.y * scale } : undefined
             }));
 
-            // Use the path's specific color if available
             this.path(transformedPoints, 'F', options.color || path.color);
         }
+        return this;
+    }
+
+    gradient(colors: { offset: number, color: string }[], x0: number, y0: number, x1: number, y1: number) {
+        if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
+        
+        const parseColor = (c: string): [number, number, number] => {
+             const r = parseInt(c.slice(1, 3), 16) / 255;
+             const g = parseInt(c.slice(3, 5), 16) / 255;
+             const b = parseInt(c.slice(5, 7), 16) / 255;
+             return [r, g, b];
+        };
+
+        const stops = colors.map(s => ({ offset: s.offset, color: parseColor(s.color) }));
+        const shading = this.doc.addShading(stops, [x0, y0, x1, y1]);
+        
+        this.currentPage.addShadingResource(shading.name, shading.ref);
+        this.currentPage.drawShading(shading.name);
         return this;
     }
 

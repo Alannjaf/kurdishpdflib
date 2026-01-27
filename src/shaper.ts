@@ -48,6 +48,27 @@ export class TextShaper {
       return upem;
   }
 
+  getGlyphIndex(fontBytes: Uint8Array, code: number): number {
+      const blob = this.hb.createBlob(fontBytes);
+      const face = this.hb.createFace(blob, 0);
+      const font = this.hb.createFont(face);
+      const buffer = this.hb.createBuffer();
+      
+      buffer.addText(String.fromCodePoint(code));
+      buffer.guessSegmentProperties();
+      this.hb.shape(font, buffer);
+      
+      const arr = buffer.json();
+      const gid = arr.length > 0 ? arr[0].g : 0;
+
+      buffer.destroy();
+      font.destroy();
+      face.destroy();
+      blob.destroy();
+      
+      return gid;
+  }
+
   shape(fontBytes: Uint8Array, text: string, options: { rtl?: boolean } = {}): ShapedGlyph[] {
     const blob = this.hb.createBlob(fontBytes);
     const face = this.hb.createFace(blob, 0);
