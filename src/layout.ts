@@ -70,16 +70,13 @@ export class LayoutEngine {
                 // Multi-line wrapping calculation
                 const lines = this.wrapText(el.content, maxWidth, size, font, rtl);
                 w = maxWidth;
-                h = lines.length * (size * 1.4);
+                h = lines.length * (size * (el.options?.lineHeight || 1.4));
             } else {
                 // Single line
                 w = this.doc.measureText(el.content, size, { font, rtl });
-                h = size * 1.2;
+                h = size * (el.options?.lineHeight || 1.2); // slight buffer
             }
-        } else if (el.type === 'rect' || el.type === 'image') {
-            w = el.width;
-            h = el.height;
-        } else if (el.type === 'svg') {
+        } else if (el.type === 'rect' || el.type === 'image' || el.type === 'svg') {
             w = el.width;
             h = el.height;
         } else if (el.type === 'spacer') {
@@ -130,35 +127,35 @@ export class LayoutEngine {
         const innerW = w - m.left - m.right;
         const innerH = h - m.top - m.bottom;
 
-        // Apply Opacity
-        if (options.opacity !== undefined) {
-            this.doc.setOpacity(options.opacity);
-        }
-
-        // Draw Background and Border
-        if (options.backgroundColor || (options.borderColor && options.borderWidth)) {
-            const style = options.backgroundColor && options.borderColor ? 'FD' : (options.backgroundColor ? 'F' : 'S');
-            
-            // If borderRadius is set, we need to clip the child content to this shape!
+        // 1. Draw Background (Fill only) - Drawn FIRST
+        if (options.backgroundColor) {
+            const style = 'F';
             if (options.borderRadius) {
                 this.doc.saveGraphicsState();
-                // Draw the shape for background/border
                 if (this.doc.roundedRect) {
-                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor || options.borderColor);
+                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor);
                     
-                    // Create clipping path for child
+                    // Create clipping path for child content
                     this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); 
-                    // this.doc.clip(); // REMOVED: roundedRect('N') already sets the clip
                 }
             } else {
-                this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor || options.borderColor);
+                this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor);
             }
+        } else if (options.borderRadius) {
+             // If no background but rounded, we still need to clip
+             this.doc.saveGraphicsState();
+             this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N');
         }
 
         const contentX = innerX + p.left;
         const contentY = innerY - p.top;
         const contentW = innerW - p.left - p.right;
         const contentH = innerH - p.top - p.bottom;
+
+        // Apply Opacity
+        if (options.opacity !== undefined) {
+            this.doc.setOpacity(options.opacity);
+        }
 
         if (el.type === 'text') {
             const size = el.options?.size || 12;
@@ -176,7 +173,6 @@ export class LayoutEngine {
                     const isLastLine = i === lines.length - 1;
                     
                     if (align === 'justify' && !isLastLine && !el.options?.rtl) {
-                        // Implement manual justification for LTR text
                         const words = line.trim().split(/\s+/);
                         if (words.length > 1) {
                             const wordWidths = words.map(w => this.doc.measureText(w, size, { font: el.options?.font }));
@@ -201,7 +197,6 @@ export class LayoutEngine {
                          const rightOffset = maxWidth - lineWidth;
                          this.doc.text(line, contentX + rightOffset, currentY - size, el.options);
                     } else {
-                        // Left aligned (default)
                         this.doc.text(line, contentX, currentY - size, el.options);
                     }
                     currentY -= lineHeight;
@@ -214,82 +209,67 @@ export class LayoutEngine {
         } else if (el.type === 'image') {
             this.doc.image(el.data, el.imgType, contentX, contentY - contentH, contentW, contentH);
         } else if (el.type === 'svg') {
-            // Pass contentY (TOP edge) because svg() draws downwards (y - p.y)
             this.doc.svg(el.content, contentX, contentY, { 
                 scale: el.options?.scale, 
                 color: el.options?.color 
             });
         } else if (el.type === 'vstack') {
+            const gap = options.gap || 0;
             const childrenSizes = el.children.map(c => this.calculateSize(c));
             
-            // Calculate Gap
-            let gap = options.gap || 0;
+            // Calculate Distribution Spacing
+            let effectiveGap = gap;
             if (options.align === 'space-between' && el.children.length > 1) {
                 const totalChildHeight = childrenSizes.reduce((a, b) => a + b.height, 0);
-                gap = (contentH - totalChildHeight) / (el.children.length - 1);
+                effectiveGap = (contentH - totalChildHeight) / (el.children.length - 1);
             } else if (options.align === 'space-evenly' && el.children.length > 0) {
                 const totalChildHeight = childrenSizes.reduce((a, b) => a + b.height, 0);
-                gap = (contentH - totalChildHeight) / (el.children.length + 1);
+                effectiveGap = (contentH - totalChildHeight) / (el.children.length + 1);
             }
 
             let currentY = contentY;
-            if (options.align === 'space-evenly') currentY -= gap;
+            if (options.align === 'space-evenly') currentY -= effectiveGap;
 
             el.children.forEach((child, i) => {
                 const size = childrenSizes[i];
                 let offsetX = 0;
-                // Note: margin logic simplified here for brevity, assuming standard centering
                 if (options.align === 'center') offsetX = (contentW - size.width) / 2;
                 else if (options.align === 'end') offsetX = contentW - size.width;
-                // Cross-axis alignment (horizontal for vstack) usually defaults to start unless specified otherwise
-                // We should probably add crossAlign to options later, but re-using align for now is ambiguous.
-                // Assuming 'align' on vstack controls vertical distribution if space-between/evenly, otherwise horizontal align?
-                // Standard Flexbox: justify-content (main axis), align-items (cross axis).
-                // Here 'align' is doing double duty. Let's assume it means Cross Axis alignment unless it's space-between/evenly.
-                
-                // Correction: If space-between/evenly, we default cross-axis to 'start' or 'center'?
-                // Let's stick to 'start' for cross-axis if strictly doing vertical distribution.
                 
                 this.drawElement(child, contentX + offsetX, currentY, size.width, size.height);
-                currentY -= (size.height + gap);
+                currentY -= (size.height + effectiveGap);
             });
         } else if (el.type === 'hstack') {
             const childrenSizes = el.children.map(c => this.calculateSize(c));
             
-            let gap = options.gap || 0;
+            let effectiveGap = options.gap || 0;
             if (options.align === 'space-between' && el.children.length > 1) {
                 const totalChildWidth = childrenSizes.reduce((a, b) => a + b.width, 0);
-                gap = (contentW - totalChildWidth) / (el.children.length - 1);
+                effectiveGap = (contentW - totalChildWidth) / (el.children.length - 1);
             } else if (options.align === 'space-evenly' && el.children.length > 0) {
                 const totalChildWidth = childrenSizes.reduce((a, b) => a + b.width, 0);
-                gap = (contentW - totalChildWidth) / (el.children.length + 1);
+                effectiveGap = (contentW - totalChildWidth) / (el.children.length + 1);
             }
 
             let currentX = contentX;
-            if (options.align === 'space-evenly') currentX += gap;
+            if (options.align === 'space-evenly') currentX += effectiveGap;
 
             el.children.forEach((child, i) => {
                 const size = childrenSizes[i];
                 let offsetY = 0;
-                // Align controls vertical alignment in hstack usually, but if it's space-between/evenly it controls horizontal.
-                // Again, double duty. If space-*, assume center vertical? Or start?
-                // Let's default cross-axis to center for hstack because that's usually what people want (vertical center).
                 if (options.align !== 'space-between' && options.align !== 'space-evenly') {
                      if (options.align === 'center') offsetY = (contentH - size.height) / 2;
                      else if (options.align === 'end') offsetY = contentH - size.height;
                 } else {
-                    // For space- distribution, default vertical center
                     offsetY = (contentH - size.height) / 2;
                 }
 
                 this.drawElement(child, currentX, contentY - offsetY, size.width, size.height);
-                currentX += (size.width + gap);
+                currentX += (size.width + effectiveGap);
             });
         } else if (el.type === 'zstack') {
-            // Render all children at top-left (stacked)
             for (const child of el.children) {
                 const size = this.calculateSize(child);
-                // Support alignment within the zstack (like overlapping layers)
                 let offsetX = 0;
                 let offsetY = 0;
                 if (options.align === 'center') {
@@ -303,16 +283,15 @@ export class LayoutEngine {
             }
         } else if (el.type === 'box') {
             const size = this.calculateSize(el.child);
-            // Handle box alignment
             let childX = contentX;
             let childY = contentY;
             
-            // If the box is larger than the child (due to fixed width/height), align the child
             if (options.align === 'center') {
                 childX += (contentW - size.width) / 2;
-                // childY -= (contentH - size.height) / 2; // Vertical center? LayoutEngine usually top-down
+                childY -= (contentH - size.height) / 2; 
             } else if (options.align === 'end') {
                 childX += contentW - size.width;
+                childY -= contentH - size.height; 
             }
             
             this.drawElement(el.child, childX, childY, size.width, size.height);
@@ -326,6 +305,16 @@ export class LayoutEngine {
         // Reset Opacity
         if (options.opacity !== undefined) {
             this.doc.setOpacity(1.0);
+        }
+
+        // Draw Border (Stroke only) - Drawn LAST (on top of content)
+        if (options.borderColor && options.borderWidth) {
+            const style = 'S';
+            if (options.borderRadius && this.doc.roundedRect) {
+                this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.borderColor, options.borderWidth);
+            } else {
+                this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.borderColor, options.borderWidth);
+            }
         }
     }
 
