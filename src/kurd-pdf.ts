@@ -169,7 +169,7 @@ export class KurdPDF {
         this.drawSingleLine(text, drawX, y, size, fontKey, rtl, color);
     }
 
-    rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' = 'S', color?: string) {
+    rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
@@ -192,11 +192,12 @@ export class KurdPDF {
             stroke: style.includes('S'),
             color: style.includes('F') ? rgb : undefined,
             strokeColor: style.includes('S') ? rgb : undefined, 
+            strokeWidth: lineWidth
         });
         return this;
     }
 
-    path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string) {
+    path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
          if (!this.currentPage) throw new Error("No page exists.");
 
          const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
@@ -225,6 +226,7 @@ export class KurdPDF {
             stroke: style.includes('S'),
             color: style.includes('F') ? rgb : undefined,
             strokeColor: style.includes('S') ? rgb : undefined,
+            strokeWidth: lineWidth
         });
         return this;
     }
@@ -282,27 +284,27 @@ export class KurdPDF {
          return this;
     }
 
-    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string) {
+    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const k = 0.552284749831;
         const kr = r * k;
         const points = [
-            { x: x + r, y: y, type: 'M' },
+            { x: x, y: y + h - r, type: 'M' },
+            { x: x, y: y + r, type: 'L' },
+            { x: x + r, y: y, type: 'C', cp1: {x: x, y: y + r - kr}, cp2: {x: x + r - kr, y: y} },
             { x: x + w - r, y: y, type: 'L' },
             { x: x + w, y: y + r, type: 'C', cp1: {x: x + w - r + kr, y: y}, cp2: {x: x + w, y: y + r - kr} },
             { x: x + w, y: y + h - r, type: 'L' },
             { x: x + w - r, y: y + h, type: 'C', cp1: {x: x + w, y: y + h - r + kr}, cp2: {x: x + w - r + kr, y: y + h} },
             { x: x + r, y: y + h, type: 'L' },
-            { x: x + r, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x + r - kr, y: y + h} },
-            { x: x, y: y + r, type: 'L' },
-            { x: x + r, y: y, type: 'C', cp1: {x: x, y: y + r - kr}, cp2: {x: x + r - kr, y: y} }
+            { x: x, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x, y: y + h - r + kr} }
         ] as any;
 
         if (style === 'N') {
             this.clip(points);
         } else {
-            this.path(points, style, color);
+            this.path(points, style, color, lineWidth);
         }
         return this;
     }

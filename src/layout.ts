@@ -147,8 +147,8 @@ export class LayoutEngine {
                     this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor || options.borderColor);
                     
                     // Create clipping path for child
-                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); // 'N' = No paint, just path
-                    this.doc.clip(); // Apply clip
+                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); 
+                    // this.doc.clip(); // REMOVED: roundedRect('N') already sets the clip
                 }
             } else {
                 this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor || options.borderColor);
