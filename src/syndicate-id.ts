@@ -55,43 +55,35 @@ async function main() {
     // BG
     doc.rect(0, 0, W, H, 'F', COLOR_BLUE);
 
-    // 1. HEADER AREA: MATHEMATICALLY PERFECT SEMI-CIRCLE
+    // 1. HEADER AREA: Perfect semi-circle
     const hHeight = 56;
     const hY = H - hHeight;
-    const hX = 70; // Leftmost point of the curve
-    const hR = hHeight / 2; // Radius = 28
+    const hX = 70; 
+    const hR = hHeight / 2;
     const hK = hR * 0.552284749831;
 
     doc.path([
-        { x: hX + hR, y: H, type: 'M' },         // Start at top edge
-        { x: W, y: H, type: 'L' },              // To Top-Right corner
-        { x: W, y: hY, type: 'L' },             // To Bottom-Right corner
-        { x: hX + hR, y: hY, type: 'L' },       // To start of bottom curve
-        // Bottom-Left Quadrant
-        { x: hX, y: hY + hR, type: 'C', 
-            cp1: { x: hX + hR - hK, y: hY }, 
-            cp2: { x: hX, y: hY + hR - hK } 
-        },
-        // Top-Left Quadrant
-        { x: hX + hR, y: H, type: 'C', 
-            cp1: { x: hX, y: hY + hR + hK }, 
-            cp2: { x: hX + hR - hK, y: H } 
-        }
+        { x: hX + hR, y: H, type: 'M' },
+        { x: W, y: H, type: 'L' },
+        { x: W, y: hY, type: 'L' },
+        { x: hX + hR, y: hY, type: 'L' },
+        { x: hX, y: hY + hR, type: 'C', cp1: { x: hX + hR - hK, y: hY }, cp2: { x: hX, y: hY + hR - hK } },
+        { x: hX + hR, y: H, type: 'C', cp1: { x: hX, y: hY + hR + hK }, cp2: { x: hX + hR - hK, y: H } }
     ], 'F', COLOR_WHITE);
 
-    // 2. LOGO: Perfect masked circle
-    const lR = 34, lCX = 15 + lR, lCY = H - 10 - lR;
+    // 2. LOGO: REDUCED BY 40% (New Radius = 19, was 32)
+    const lR = 19, lCX = 15 + lR, lCY = H - 15 - lR;
     doc.saveGraphicsState();
     doc.clip(getCirclePoints(lCX, lCY, lR));
     doc.rect(lCX - lR, lCY - lR, lR * 2, lR * 2, 'F', COLOR_WHITE);
     doc.image(logoBytes, 'jpeg', lCX - lR, lCY - lR, lR * 2, lR * 2);
     doc.restoreGraphicsState();
 
-    const hW = W - hX - 10;
+    const headerTextW = W - hX - 10;
     const headerTextX = hX + 10;
-    doc.text("سەندیکای پزیشکانی ڤێتێرنەری کوردستان", headerTextX, H - 20, { font: 'AR', size: 9, rtl: true, align: 'right', width: hW, color: COLOR_TEXT_BLUE });
-    doc.text("نقابة الأطباء البيطريين كوردستان", headerTextX, H - 32, { font: 'AR', size: 9, rtl: true, align: 'right', width: hW, color: COLOR_TEXT_BLUE });
-    doc.text("Kurdistan Veterinary Syndicate", headerTextX, H - 44, { font: 'EN', size: 9, align: 'right', width: hW, color: COLOR_TEXT_BLUE });
+    doc.text("سەندیکای پزیشکانی ڤێتێرنەری کوردستان", headerTextX, H - 20, { font: 'AR', size: 9, rtl: true, align: 'right', width: headerTextW, color: COLOR_TEXT_BLUE });
+    doc.text("نقابة الأطباء البيطريين كوردستان", headerTextX, H - 32, { font: 'AR', size: 9, rtl: true, align: 'right', width: headerTextW, color: COLOR_TEXT_BLUE });
+    doc.text("Kurdistan Veterinary Syndicate", headerTextX, H - 44, { font: 'EN', size: 9, align: 'right', width: headerTextW, color: COLOR_TEXT_BLUE });
 
     // 3. PHOTO
     const pX = 25, pY = 15, pW = 50, pH = 65;
