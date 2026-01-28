@@ -54,31 +54,70 @@ export class LayoutEngine {
         this.drawElement(element, x, y, width, height);
     }
 
-    renderFlow(element: LayoutElement, options: { topMargin?: number, bottomMargin?: number, leftMargin?: number } = {}) {
+    renderFlow(element: LayoutElement, options: { 
+        topMargin?: number, 
+        bottomMargin?: number, 
+        leftMargin?: number,
+        header?: LayoutElement | ((page: number) => LayoutElement),
+        footer?: LayoutElement | ((page: number) => LayoutElement)
+    } = {}) {
         const top = options.topMargin ?? 50;
         const bottom = options.bottomMargin ?? 50;
         const left = options.leftMargin ?? 0;
         const pageHeight = 842; // Standard A4
 
+        const getHeader = (page: number) => typeof options.header === 'function' ? options.header(page) : options.header;
+        const getFooter = (page: number) => typeof options.footer === 'function' ? options.footer(page) : options.footer;
+
         if (element.type === 'vstack') {
             const gap = element.options?.gap || 0;
-            let currentY = pageHeight - top;
+            let pageNumber = 1;
+
+            let headerEl = getHeader(pageNumber);
+            let footerEl = getFooter(pageNumber);
+            let headerSize = headerEl ? this.calculateSize(headerEl) : { width: 0, height: 0 };
+            let footerSize = footerEl ? this.calculateSize(footerEl) : { width: 0, height: 0 };
+
+            let currentY = pageHeight - top - headerSize.height;
+
+            // Draw initial header
+            if (headerEl) this.drawElement(headerEl, left, pageHeight - top, headerSize.width, headerSize.height);
 
             element.children.forEach((child) => {
                 const { width, height } = this.calculateSize(child);
                 
                 // If child is too tall for current page, move to next page
-                if (currentY - height < bottom) {
+                if (currentY - height < bottom + footerSize.height) {
+                    // Draw current footer before leaving
+                    if (footerEl) this.drawElement(footerEl, left, bottom + footerSize.height, footerSize.width, footerSize.height);
+
                     this.doc.addPage();
-                    currentY = pageHeight - top;
+                    pageNumber++;
+
+                    headerEl = getHeader(pageNumber);
+                    footerEl = getFooter(pageNumber);
+                    headerSize = headerEl ? this.calculateSize(headerEl) : { width: 0, height: 0 };
+                    footerSize = footerEl ? this.calculateSize(footerEl) : { width: 0, height: 0 };
+
+                    currentY = pageHeight - top - headerSize.height;
+                    if (headerEl) this.drawElement(headerEl, left, pageHeight - top, headerSize.width, headerSize.height);
                 }
 
                 this.drawElement(child, left, currentY, width, height);
                 currentY -= (height + gap);
             });
+
+            // Draw the last page footer
+            if (footerEl) this.drawElement(footerEl, left, bottom + footerSize.height, footerSize.width, footerSize.height);
         } else {
             // For non-vstack elements, just render normally at the top
-            this.render(element, left, pageHeight - top);
+            const headerEl = getHeader(1);
+            const headerSize = headerEl ? this.calculateSize(headerEl) : { width: 0, height: 0 };
+            if (headerEl) this.drawElement(headerEl, left, pageHeight - top, headerSize.width, headerSize.height);
+            this.render(element, left, pageHeight - top - headerSize.height);
+            const footerEl = getFooter(1);
+            const footerSize = footerEl ? this.calculateSize(footerEl) : { width: 0, height: 0 };
+            if (footerEl) this.drawElement(footerEl, left, bottom + footerSize.height, footerSize.width, footerSize.height);
         }
     }
 
