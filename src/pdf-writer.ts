@@ -1,3 +1,5 @@
+import { deflate } from 'pako';
+
 /**
  * Low-level PDF serialization: objects, xref, trailer.
  * No external libraries; uses only Uint8Array / Buffer and string ops.
@@ -96,8 +98,13 @@ export class PdfWriter {
 
   addStream(dict: Record<string, unknown>, body: Uint8Array): PdfRef {
     const id = this.allocId();
-    const streamDict = { ...dict, Length: body.length } as Record<string, unknown>;
-    const obj: PdfWriterObject = { id, gen: 0, kind: 'stream', dict: streamDict, stream: body };
+    const compressed = deflate(body);
+    const streamDict = { 
+        ...dict, 
+        Length: compressed.length,
+        Filter: name('FlateDecode') 
+    } as Record<string, unknown>;
+    const obj: PdfWriterObject = { id, gen: 0, kind: 'stream', dict: streamDict, stream: compressed };
     this.objects.push(obj);
     this.refs.set(id, obj);
     return { id, gen: 0 };
