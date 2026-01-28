@@ -27,6 +27,7 @@ export type LayoutElement =
     | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD'|'N', color?: string, opacity?: number } }
     | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number, options?: { align?: 'center' | 'end' | 'start', objectFit?: 'fill' | 'contain' | 'cover' } }
     | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
+    | { type: 'link', url: string, child: LayoutElement, options?: LayoutOptions }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
     | { type: 'box', child: LayoutElement, options?: LayoutOptions }
     | { type: 'spacer', size: number };
@@ -124,7 +125,7 @@ export class LayoutEngine {
             const sizes = el.children.map(c => this.calculateSize(c));
             w = Math.max(...sizes.map(s => s.width), el.options?.width || 0);
             h = Math.max(...sizes.map(s => s.height), el.options?.height || 0);
-        } else if (el.type === 'box') {
+        } else if (el.type === 'box' || el.type === 'link') {
             const inner = this.calculateSize(el.child);
             w = inner.width;
             h = inner.height;
@@ -329,6 +330,10 @@ export class LayoutEngine {
                 }
                 this.drawElement(child, contentX + offsetX, contentY - offsetY, size.width, size.height);
             }
+        } else if (el.type === 'link') {
+            const size = this.calculateSize(el.child);
+            this.doc.addLink(el.url, contentX, contentY - size.height, size.width, size.height);
+            this.drawElement(el.child, contentX, contentY, size.width, size.height);
         } else if (el.type === 'box') {
             const size = this.calculateSize(el.child);
             let childX = contentX;

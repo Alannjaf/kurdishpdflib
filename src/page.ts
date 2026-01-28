@@ -41,6 +41,7 @@ export interface Page {
   drawImage(imageRef: string, options: DrawImageOptions): void;
   drawRect(options: DrawRectOptions): void;
   drawPath(options: DrawPathOptions): void;
+  addLink(url: string, x: number, y: number, width: number, height: number): void;
   saveGraphicsState(): void;
   restoreGraphicsState(): void;
   clip(): void;
@@ -62,6 +63,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   const { fonts = {}, images = {}, extGStates = {}, shading = {} } = options;
   const contentChunks: Uint8Array[] = [];
   const push = (s: string) => contentChunks.push(encodeStr(s));
+  const annotations: PdfRef[] = [];
 
   const fontDict: Record<string, unknown> = {};
   for (const [key, info] of Object.entries(fonts)) fontDict[key] = info.fontRef;
@@ -80,6 +82,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
     Type: name('Page'), Parent: pagesRef, MediaBox: [0, 0, width, height],
     Contents: null as unknown as PdfRef,
     Resources: { Font: fontDict, XObject: xObjectDict, ExtGState: extGStateDict, Shading: shadingDict },
+    Annots: annotations,
   });
 
   const contentsRef = w.addStream({}, new Uint8Array(0));
@@ -90,6 +93,21 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   kids.push(pageDict);
   (pagesObj.dict as Record<string, unknown>).Count = kids.length;
   pageRefs.push(pageDict);
+
+  function addLink(url: string, x: number, y: number, width: number, height: number): void {
+      const annotRef = w.addDict({
+          Type: name('Annot'),
+          Subtype: name('Link'),
+          Rect: [x, y, x + width, y + height],
+          Border: [0, 0, 0], // Invisible border
+          A: {
+              Type: name('Action'),
+              S: name('URI'),
+              URI: url,
+          },
+      });
+      annotations.push(annotRef);
+  }
 
   function drawText(text: string, opts: DrawTextOptions): void {
     const { x, y, size = 12, font = 'F1', color } = opts;
@@ -164,7 +182,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   }
 
   const page: Page = {
-      drawText, drawRect, drawImage, drawPath, addImageResource: (n, r) => { xObjectDict[n] = r; },
+      drawText, drawRect, drawImage, drawPath, addLink, addImageResource: (n, r) => { xObjectDict[n] = r; },
       addExtGStateResource: (n, r) => { extGStateDict[n] = r; },
       addShadingResource: (n, r) => { shadingDict[n] = r; },
       saveGraphicsState: () => push('q\n'), restoreGraphicsState: () => push('Q\n'), clip: () => push('W n\n'),
