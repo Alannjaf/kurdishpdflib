@@ -529,19 +529,28 @@ export class KurdPDF {
         return this;
     }
 
-    image(data: Uint8Array, type: 'jpeg' | 'png', x: number, y: number, w: number, h: number, originalWidth?: number, originalHeight?: number) {
+    image(data: Uint8Array | string, type: 'jpeg' | 'png', x: number, y: number, w: number, h: number, originalWidth?: number, originalHeight?: number) {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
         
+        let bytes: Uint8Array;
+        if (typeof data === 'string') {
+            // Remove data:image/...;base64, prefix if present
+            const base64 = data.replace(/^data:image\/\w+;base64,/, '');
+            bytes = new Uint8Array(Buffer.from(base64, 'base64'));
+        } else {
+            bytes = data;
+        }
+
         let pxW = originalWidth;
         let pxH = originalHeight;
 
         if (!pxW || !pxH) {
-            const dims = this.getImageDimensions(data, type);
+            const dims = this.getImageDimensions(bytes, type);
             pxW = dims.width;
             pxH = dims.height;
         }
 
-        const id = this.doc.addImage(data, type, pxW, pxH);
+        const id = this.doc.addImage(bytes, type, pxW, pxH);
         
         const ref = this.doc.getImageRef(id);
         if (ref) {
