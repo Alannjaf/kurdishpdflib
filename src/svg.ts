@@ -124,14 +124,10 @@ export function parseSVG(svgContent: string): { paths: SVGPath[], viewBox?: { x:
         paths.push({
             points: [
                 { x: cx + r, y: cy, type: 'M' },
-                { x: cx + r, y: cy + kr, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
-                { x: cx, y: cy + r, type: 'L' },
-                { x: cx - kr, y: cy + r, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
-                { x: cx - r, y: cy, type: 'L' },
-                { x: cx - r, y: cy - kr, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
-                { x: cx, y: cy - r, type: 'L' },
-                { x: cx + kr, y: cy - r, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} },
-                { x: cx + r, y: cy, type: 'L' }
+                { x: cx, y: cy + r, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
+                { x: cx - r, y: cy, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
+                { x: cx, y: cy - r, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
+                { x: cx + r, y: cy, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} }
             ],
             ...style
         });
