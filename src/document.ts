@@ -159,7 +159,12 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
         outlines.push({ title, pageIdx });
     },
     save(): Uint8Array {
-      for (const p of pages) finalizePageContent(p, w);
+      for (const p of pages) {
+          finalizePageContent(p, w);
+          if ((p as any)._finalizeInternalLinks) {
+              (p as any)._finalizeInternalLinks(pageRefs);
+          }
+      }
 
       // Handle Outlines (Bookmarks)
       if (outlines.length > 0) {

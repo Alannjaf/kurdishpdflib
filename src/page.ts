@@ -42,6 +42,7 @@ export interface Page {
   drawRect(options: DrawRectOptions): void;
   drawPath(options: DrawPathOptions): void;
   addLink(url: string, x: number, y: number, width: number, height: number): void;
+  addInternalLink(targetPageIdx: number, x: number, y: number, width: number, height: number): void;
   saveGraphicsState(): void;
   restoreGraphicsState(): void;
   clip(): void;
@@ -64,6 +65,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   const contentChunks: Uint8Array[] = [];
   const push = (s: string) => contentChunks.push(encodeStr(s));
   const annotations: PdfRef[] = [];
+  const internalLinks: { annotRef: PdfRef, targetIdx: number }[] = [];
 
   const fontDict: Record<string, unknown> = {};
   for (const [key, info] of Object.entries(fonts)) fontDict[key] = info.fontRef;
@@ -107,6 +109,18 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           },
       });
       annotations.push(annotRef);
+  }
+
+  function addInternalLink(targetIdx: number, x: number, y: number, width: number, height: number): void {
+      const annotRef = w.addDict({
+          Type: name('Annot'),
+          Subtype: name('Link'),
+          Rect: [x, y, x + width, y + height],
+          Border: [0, 0, 0],
+          Dest: null as any, // Resolved later
+      });
+      annotations.push(annotRef);
+      internalLinks.push({ annotRef, targetIdx });
   }
 
   function drawText(text: string, opts: DrawTextOptions): void {
@@ -182,7 +196,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   }
 
   const page: Page = {
-      drawText, drawRect, drawImage, drawPath, addLink, addImageResource: (n, r) => { xObjectDict[n] = r; },
+      drawText, drawRect, drawImage, drawPath, addLink, addInternalLink, addImageResource: (n, r) => { xObjectDict[n] = r; },
       addExtGStateResource: (n, r) => { extGStateDict[n] = r; },
       addShadingResource: (n, r) => { shadingDict[n] = r; },
       saveGraphicsState: () => push('q\n'), restoreGraphicsState: () => push('Q\n'), clip: () => push('W n\n'),
@@ -219,6 +233,15 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
               if (item.g.unicode != null && info.usedGidToUnicode) info.usedGidToUnicode.push([item.g.gid, item.g.unicode]);
           }
           push('ET Q\n');
+      }
+  };
+
+  (page as any)._finalizeInternalLinks = (pRefs: PdfRef[]) => {
+      for (const link of internalLinks) {
+          const obj = w.refsMap.get(link.annotRef.id);
+          if (obj && obj.dict && pRefs[link.targetIdx]) {
+              obj.dict.Dest = [pRefs[link.targetIdx], name('Fit')];
+          }
       }
   };
 

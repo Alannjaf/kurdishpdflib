@@ -50,7 +50,6 @@ export function embedFont(
   const parsed = parseTTF(ttfBytes);
   const metrics = createFontMetrics(parsed);
   const { ascent, descent, bbox } = readFontMetrics(parsed);
-  console.log(`DEBUG: Font ${baseFontName} BBox: ${bbox.join(', ')} Ascent: ${ascent} Descent: ${descent}`);
 
   const fontFileRef = w.addStream({ Length1: ttfBytes.length }, ttfBytes);
 

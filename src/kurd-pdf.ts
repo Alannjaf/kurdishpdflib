@@ -66,6 +66,14 @@ export class KurdPDF {
         return this;
     }
 
+    get activePage(): Page | null {
+        return this.currentPage;
+    }
+
+    set activePage(p: Page | null) {
+        this.currentPage = p;
+    }
+
     addBookmark(title: string, pageIdx: number) {
         if (!this.doc) throw new Error("Document not initialized.");
         this.doc.addOutline(title, pageIdx);
@@ -78,10 +86,16 @@ export class KurdPDF {
         return this;
     }
 
+    addPageLink(pageIdx: number, x: number, y: number, width: number, height: number) {
+        if (!this.currentPage) throw new Error("No page exists.");
+        this.currentPage.addInternalLink(pageIdx, x, y, width, height);
+        return this;
+    }
+
     addPage(width = 595, height = 842) {
         if (!this.doc) throw new Error("Document not initialized. Call await doc.init()");
         this.currentPage = this.doc.addPage(width, height);
-        return this;
+        return this.currentPage;
     }
 
     setFont(fontName: string) {
