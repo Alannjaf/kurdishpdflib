@@ -249,13 +249,26 @@ export class KurdPDF {
         return this;
     }
 
-    private parseColorHex(c?: string): [number, number, number] | undefined {
+    private parseColorHex(c?: string): [number, number, number] | [number, number, number, number] | undefined {
          if (!c) return undefined;
          if (c.startsWith('#')) {
+             // ... existing RGB hex logic ...
              const r = parseInt(c.slice(1, 3), 16) / 255;
              const g = parseInt(c.slice(3, 5), 16) / 255;
              const b = parseInt(c.slice(5, 7), 16) / 255;
              return [r, g, b];
+         }
+         if (c.startsWith('cmyk(')) {
+             // cmyk(100%, 0%, 50%, 10%)
+             const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
+             if (parts) {
+                 return [
+                     parseFloat(parts[1]) / 100,
+                     parseFloat(parts[2]) / 100,
+                     parseFloat(parts[3]) / 100,
+                     parseFloat(parts[4]) / 100
+                 ];
+             }
          }
          return undefined;
     }
@@ -332,7 +345,7 @@ export class KurdPDF {
         }
     }
 
-    private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number], wordSpacing: number = 0) {
+    private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number] | [number, number, number, number], wordSpacing: number = 0) {
         if (this.fonts[fontKey] && this.shaper) {
             const fontBytes = this.fonts[fontKey].fontBytes;
             const shaped = this.shaper.shape(fontBytes, text, { rtl });
@@ -342,7 +355,7 @@ export class KurdPDF {
         }
     }
 
-    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number]) {
+    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number] | [number, number, number, number]) {
         if (!this.fonts[fontKey] || !this.shaper) {
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
             return;
@@ -383,7 +396,7 @@ export class KurdPDF {
         }
     }
 
-    private drawLineAligned(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: string, color?: [number, number, number]) {
+    private drawLineAligned(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: string, color?: [number, number, number] | [number, number, number, number]) {
         const width = this.measureText(text, size, { font: fontKey, rtl });
         let drawX = x;
         let wordSpacing = 0;
@@ -407,7 +420,7 @@ export class KurdPDF {
     rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         
-        const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
+        const parseColor = (c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined => {
              if (!c) return undefined;
              if (Array.isArray(c)) return c;
              if (c.startsWith('#')) {
@@ -415,6 +428,17 @@ export class KurdPDF {
                  const g = parseInt(c.slice(3, 5), 16) / 255;
                  const b = parseInt(c.slice(5, 7), 16) / 255;
                  return [r, g, b];
+             }
+             if (c.startsWith('cmyk(')) {
+                 const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
+                 if (parts) {
+                     return [
+                         parseFloat(parts[1]) / 100,
+                         parseFloat(parts[2]) / 100,
+                         parseFloat(parts[3]) / 100,
+                         parseFloat(parts[4]) / 100
+                     ];
+                 }
              }
              return undefined;
         };
@@ -440,7 +464,7 @@ export class KurdPDF {
     path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
          if (!this.currentPage) throw new Error("No page exists.");
 
-         const parseColor = (c?: string | [number, number, number]): [number, number, number] | undefined => {
+         const parseColor = (c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined => {
              if (!c) return undefined;
              if (Array.isArray(c)) return c;
              if (c.startsWith('#')) {
@@ -448,6 +472,17 @@ export class KurdPDF {
                  const g = parseInt(c.slice(3, 5), 16) / 255;
                  const b = parseInt(c.slice(5, 7), 16) / 255;
                  return [r, g, b];
+             }
+             if (c.startsWith('cmyk(')) {
+                 const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
+                 if (parts) {
+                     return [
+                         parseFloat(parts[1]) / 100,
+                         parseFloat(parts[2]) / 100,
+                         parseFloat(parts[3]) / 100,
+                         parseFloat(parts[4]) / 100
+                     ];
+                 }
              }
              return undefined;
         };

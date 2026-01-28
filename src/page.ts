@@ -8,7 +8,7 @@ import type { FontMetrics } from './ttf/metrics.js';
 import { toGlyphIdHex } from './encoding.js';
 
 export interface DrawTextOptions {
-  x: number; y: number; size?: number; font?: string; color?: [number, number, number];
+  x: number; y: number; size?: number; font?: string; color?: [number, number, number] | [number, number, number, number];
 }
 
 export interface ShapedGlyph {
@@ -16,7 +16,7 @@ export interface ShapedGlyph {
 }
 
 export interface DrawShapedRunOptions {
-  x: number; y: number; size?: number; font?: string; rtl?: boolean; color?: [number, number, number];
+  x: number; y: number; size?: number; font?: string; rtl?: boolean; color?: [number, number, number] | [number, number, number, number];
   wordSpacing?: number;
 }
 
@@ -26,13 +26,13 @@ export interface DrawImageOptions {
 
 export interface DrawRectOptions {
   x: number; y: number; width: number; height: number;
-  color?: [number, number, number]; fill?: boolean; stroke?: boolean; strokeWidth?: number; strokeColor?: [number, number, number];
+  color?: [number, number, number] | [number, number, number, number]; fill?: boolean; stroke?: boolean; strokeWidth?: number; strokeColor?: [number, number, number] | [number, number, number, number];
 }
 
 export interface DrawPathOptions {
   points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[];
   close?: boolean; fill?: boolean; stroke?: boolean; clip?: boolean;
-  color?: [number, number, number]; strokeColor?: [number, number, number]; strokeWidth?: number;
+  color?: [number, number, number] | [number, number, number, number]; strokeColor?: [number, number, number] | [number, number, number, number]; strokeWidth?: number;
 }
 
 export interface Page {
@@ -128,8 +128,13 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
     const info = fonts[font];
     push('q ');
     if (color) {
-        const [r, g, b] = color.map(c => c > 1 ? c / 255 : c);
-        push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg `);
+        if (color.length === 4) {
+            const [c, m, y, k] = color.map(val => val > 1 ? val / 100 : val);
+            push(`${c.toFixed(3)} ${m.toFixed(3)} ${y.toFixed(3)} ${k.toFixed(3)} k `);
+        } else {
+            const [r, g, b] = color.map(c => c > 1 ? c / 255 : c);
+            push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg `);
+        }
     }
     push('BT ');
     push(`/${font} ${size} Tf ${x} ${y} Td `);
@@ -150,8 +155,24 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
       const { x, y, width, height, color, fill = true, stroke = false, strokeWidth = 1, strokeColor } = opts;
       push('q\n');
       if (strokeWidth !== 1) push(`${strokeWidth} w\n`);
-      if (color) { const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); push(`${r} ${g} ${b} rg\n`); }
-      if (strokeColor) { const [r, g, b] = strokeColor.map(c => c > 1 ? c / 255 : c); push(`${r} ${g} ${b} RG\n`); }
+      if (color) { 
+          if (color.length === 4) {
+              const [c, m, y, k] = color.map(val => val > 1 ? val / 100 : val);
+              push(`${c} ${m} ${y} ${k} k\n`);
+          } else {
+              const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); 
+              push(`${r} ${g} ${b} rg\n`); 
+          }
+      }
+      if (strokeColor) { 
+          if (strokeColor.length === 4) {
+              const [c, m, y, k] = strokeColor.map(val => val > 1 ? val / 100 : val);
+              push(`${c} ${m} ${y} ${k} K\n`);
+          } else {
+              const [r, g, b] = strokeColor.map(c => c > 1 ? c / 255 : c); 
+              push(`${r} ${g} ${b} RG\n`); 
+          }
+      }
       push(`${x} ${y} ${width} ${height} re\n`);
       if (fill && stroke) push('B\n'); else if (fill) push('f\n'); else if (stroke) push('S\n');
       push('Q\n');
@@ -164,8 +185,24 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
       if (!clip) push('q\n'); 
       
       if (strokeWidth !== 1) push(`${strokeWidth} w\n`);
-      if (color) { const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); push(`${r} ${g} ${b} rg\n`); }
-      if (strokeColor) { const [r, g, b] = strokeColor.map(c => c > 1 ? c / 255 : c); push(`${r} ${g} ${b} RG\n`); }
+      if (color) { 
+          if (color.length === 4) {
+              const [c, m, y, k] = color.map(val => val > 1 ? val / 100 : val);
+              push(`${c} ${m} ${y} ${k} k\n`);
+          } else {
+              const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); 
+              push(`${r} ${g} ${b} rg\n`); 
+          }
+      }
+      if (strokeColor) { 
+          if (strokeColor.length === 4) {
+              const [c, m, y, k] = strokeColor.map(val => val > 1 ? val / 100 : val);
+              push(`${c} ${m} ${y} ${k} K\n`);
+          } else {
+              const [r, g, b] = strokeColor.map(c => c > 1 ? c / 255 : c); 
+              push(`${r} ${g} ${b} RG\n`); 
+          }
+      }
       
       for (const p of points) {
           const px = p.x.toFixed(6), py = p.y.toFixed(6);
@@ -212,7 +249,15 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           if (!info || !info.metrics) return;
           const scale = size / info.metrics.unitsPerEm;
           push('q ');
-          if (color) { const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg `); }
+          if (color) { 
+              if (color.length === 4) {
+                  const [c, m, y, k] = color.map(val => val > 1 ? val / 100 : val);
+                  push(`${c.toFixed(3)} ${m.toFixed(3)} ${y.toFixed(3)} ${k.toFixed(3)} k `);
+              } else {
+                  const [r, g, b] = color.map(c => c > 1 ? c / 255 : c); 
+                  push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg `); 
+              }
+          }
           push('BT ');
           push(`/${font} ${size} Tf `);
           let cx = x, cy = y;
@@ -256,12 +301,22 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   return page;
 }
 
+import { deflate } from 'pako';
+
 export function finalizePageContent(page: Page, w: PdfWriter): void {
   const p = page as any;
   if (!p._getContent || !p._contentRef) return;
   const body = p._getContent();
   const obj = w.refsMap.get(p._contentRef.id);
   if (!obj || obj.kind !== 'stream') return;
-  (obj as any).stream = body;
-  (obj.dict as any).Length = body.length;
+
+  // Check if the stream was intended to be compressed
+  if (obj.dict && (obj.dict.Filter as any)?.__pdfName === 'FlateDecode') {
+      const compressed = deflate(body);
+      (obj as any).stream = compressed;
+      (obj.dict as any).Length = compressed.length;
+  } else {
+      (obj as any).stream = body;
+      (obj.dict as any).Length = body.length;
+  }
 }

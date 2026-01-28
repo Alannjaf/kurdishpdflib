@@ -1,9 +1,6 @@
 import { deflate } from 'pako';
-
-/**
- * Low-level PDF serialization: objects, xref, trailer.
- * No external libraries; uses only Uint8Array / Buffer and string ops.
- */
+// PDF requires binary strings for streams, and proper encoding.
+// We'll use TextEncoder for strings, but for compressed data we must be careful.
 
 export type PdfRef = { id: number; gen: number };
 
@@ -98,12 +95,17 @@ export class PdfWriter {
 
   addStream(dict: Record<string, unknown>, body: Uint8Array): PdfRef {
     const id = this.allocId();
+    // Use raw pako.deflate (zlib format by default)
+    // IMPORTANT: Ensure the output is Uint8Array
     const compressed = deflate(body);
+    
+    // We must ensure the Length is exactly the byte length of the compressed data
     const streamDict = { 
         ...dict, 
         Length: compressed.length,
         Filter: name('FlateDecode') 
     } as Record<string, unknown>;
+    
     const obj: PdfWriterObject = { id, gen: 0, kind: 'stream', dict: streamDict, stream: compressed };
     this.objects.push(obj);
     this.refs.set(id, obj);
