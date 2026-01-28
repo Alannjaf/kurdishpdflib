@@ -81,32 +81,56 @@ export class KurdPDF {
         if (text.length === 0) return [];
         
         const runs: { font: string, text: string, isRtl: boolean }[] = [];
-        let currentFont = this.getBestFontForChar(text[0]);
-        let currentText = text[0];
         
         const isRtlChar = (char: string) => {
             const code = char.codePointAt(0)!;
-            return (code >= 0x0600 && code <= 0x06FF) || (code >= 0x0750 && code <= 0x077F) || (code >= 0x08A0 && code <= 0x08FF) || (code >= 0xFB50 && code <= 0xFDFF) || (code >= 0xFE70 && code <= 0xFEFF);
+            // Basic RTL ranges (Arabic, Syriac, Thaana, etc.)
+            return (code >= 0x0590 && code <= 0x05FF) || // Hebrew
+                   (code >= 0x0600 && code <= 0x06FF) || // Arabic
+                   (code >= 0x0750 && code <= 0x077F) || // Arabic Supp
+                   (code >= 0x08A0 && code <= 0x08FF) || // Arabic Ext
+                   (code >= 0xFB50 && code <= 0xFDFF) || // Arabic Pres A
+                   (code >= 0xFE70 && code <= 0xFEFF);   // Arabic Pres B
         };
+
+        const isDigit = (char: string) => {
+            const code = char.codePointAt(0)!;
+            return (code >= 0x0030 && code <= 0x0039) || // ASCII Digits
+                   (code >= 0x0660 && code <= 0x0669) || // Arabic-Indic Digits
+                   (code >= 0x06F0 && code <= 0x06F9);   // Ext Arabic-Indic Digits
+        };
+
+        const isNeutral = (char: string) => {
+            return /[\s\.\-\/\(\)\•\:]/.test(char);
+        };
+
+        const getCharDir = (char: string): boolean => {
+            if (isDigit(char)) return false; // Digits are ALWAYS LTR
+            if (isRtlChar(char)) return true; // Kurdish/Arabic is RTL
+            return false; // Default (English, etc.) is LTR
+        };
+
+        let currentFont = this.getBestFontForChar(text[0]);
+        let currentIsRtl = getCharDir(text[0]);
+        let currentText = text[0];
 
         for (let i = 1; i < text.length; i++) {
             const char = text[i];
             const font = this.getBestFontForChar(char);
             
-            if (char === ' ' || char === '\n' || char === '\r' || char === '\t') {
-                currentText += char;
-                continue;
-            }
+            // Neutrals take the direction of the current run to prevent fragmentation
+            const charDir = isNeutral(char) ? currentIsRtl : getCharDir(char);
 
-            if (font !== currentFont) {
-                runs.push({ font: currentFont, text: currentText, isRtl: isRtlChar(currentText.trim()[0] || ' ') });
+            if (font !== currentFont || charDir !== currentIsRtl) {
+                runs.push({ font: currentFont, text: currentText, isRtl: currentIsRtl });
                 currentFont = font;
+                currentIsRtl = charDir;
                 currentText = char;
             } else {
                 currentText += char;
             }
         }
-        runs.push({ font: currentFont, text: currentText, isRtl: isRtlChar(currentText.trim()[0] || ' ') });
+        runs.push({ font: currentFont, text: currentText, isRtl: currentIsRtl });
         return runs;
     }
 
@@ -218,29 +242,38 @@ export class KurdPDF {
     }
 
     private drawRunsAligned(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string) {
+        // Add a tiny safety inset (1.0px) to prevent clipping artifacts at the edges
+        const safetyInset = 1.0;
+        const availableWidth = maxWidth - (safetyInset * 2);
+        const startX = x + safetyInset;
+
         const totalWidth = this.measureText(text, size);
-        let drawX = x;
-        if (align === 'center') drawX += (maxWidth - totalWidth) / 2;
-        else if (align === 'right') drawX += (maxWidth - totalWidth);
+        let drawX = startX;
+        
+        if (align === 'center') drawX += (availableWidth - totalWidth) / 2;
+        else if (align === 'right') drawX += (availableWidth - totalWidth);
         
         const runs = this.splitIntoRuns(text);
-        const isLineRtl = runs.length > 0 && runs[0].isRtl;
+        // Better Line RTL detection: if ANY run is RTL, the whole line flows RTL
+        const isLineRtl = runs.some(r => r.isRtl);
 
         let wordSpacing = 0;
-        if (align === 'justify' && maxWidth > totalWidth) {
+        if (align === 'justify' && availableWidth > totalWidth) {
             const spaceCount = text.trim().split(/\s+/).length - 1;
             if (spaceCount > 0) {
-                wordSpacing = (maxWidth - totalWidth) / spaceCount;
+                wordSpacing = (availableWidth - totalWidth) / spaceCount;
             }
         }
 
         if (isLineRtl) {
-            let currentX = drawX + maxWidth;
+            let currentX = drawX + availableWidth;
             for (const run of runs) {
                 const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
                 
+                // Draw this segment using its own direction (run.isRtl)
+                // This ensures numbers (isRtl: false) are shaped correctly LTR
                 this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing);
                 currentX -= justifiedRunW;
             }

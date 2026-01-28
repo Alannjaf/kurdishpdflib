@@ -76,9 +76,10 @@ export class TextShaper {
     const buffer = this.hb.createBuffer();
     
     buffer.addText(text);
-    // You could force direction here if needed, but guessSegmentProperties is usually good
     if (options.rtl) {
       buffer.setDirection('rtl');
+    } else {
+      buffer.setDirection('ltr');
     }
     buffer.guessSegmentProperties();
     

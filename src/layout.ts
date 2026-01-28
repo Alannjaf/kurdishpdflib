@@ -24,7 +24,7 @@ export interface TextElementOptions {
 
 export type LayoutElement = 
     | { type: 'text', content: string, options?: TextElementOptions }
-    | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD', color?: string, opacity?: number } }
+    | { type: 'rect', width: number, height: number, options?: { style?: 'F'|'S'|'FD'|'N', color?: string, opacity?: number } }
     | { type: 'image', data: Uint8Array, imgType: 'jpeg' | 'png', width: number, height: number, options?: { align?: 'center' | 'end' | 'start', objectFit?: 'fill' | 'contain' | 'cover' } }
     | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
@@ -162,9 +162,11 @@ export class LayoutEngine {
             const maxWidth = el.options?.width;
             const lineHeightVal = el.options?.lineHeight || 1.4;
             const align = el.options?.align || 'left';
+            const safetyInset = 2.0; // Increased buffer for wrapping math
 
             if (maxWidth && maxWidth > 0) {
-                const lines = this.wrapText(el.content, maxWidth, size, el.options?.font, el.options?.rtl);
+                const effectiveWidth = maxWidth - (safetyInset * 2);
+                const lines = this.wrapText(el.content, effectiveWidth, size, el.options?.font, el.options?.rtl);
                 let currentY = contentY;
                 const lineHeight = size * lineHeightVal;
                 
@@ -173,7 +175,7 @@ export class LayoutEngine {
                     const isLastLine = i === lines.length - 1;
                     
                     // Call doc.text with the alignment. Core doc.text now handles justification and Bidi reordering.
-                    this.doc.text(line, contentX, currentY, { ...el.options, align: isLastLine && align === 'justify' ? (el.options?.rtl ? 'right' : 'left') : align });
+                    this.doc.text(line, contentX, currentY, { ...el.options, width: maxWidth, align: isLastLine && align === 'justify' ? (el.options?.rtl ? 'right' : 'left') : align });
                     currentY -= lineHeight;
                 }
             } else {

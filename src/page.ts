@@ -195,7 +195,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
               
               return { g, tx, ty };
           });
-          if (rtl) glyphsWithPos.reverse();
+          
           for (const item of glyphsWithPos) {
               push(`1 0 0 1 ${item.tx.toFixed(3)} ${item.ty.toFixed(3)} Tm ${toGlyphIdHex([item.g.gid])} Tj `);
               if (item.g.unicode != null && info.usedGidToUnicode) info.usedGidToUnicode.push([item.g.gid, item.g.unicode]);
