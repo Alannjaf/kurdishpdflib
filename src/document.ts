@@ -36,6 +36,7 @@ export interface PDFDocument {
   getOpacityGState(opacity: number): { name: string, ref: PdfRef };
   addShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): { name: string, ref: PdfRef };
   setMetadata(key: string, value: string): void;
+  addOutline(title: string, pageIdx: number): void;
   save(): Uint8Array;
 }
 
@@ -45,6 +46,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
   w.addDict({
     Type: name('Catalog'),
     Pages: null as unknown as PdfRef,
+    Outlines: null as unknown as PdfRef,
   });
   const infoRef = w.addDict({
     Producer: 'kurd-pdflib',
@@ -61,7 +63,10 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     Count: 0,
   });
 
-  (w.refsMap.get(1)!.dict as Record<string, unknown>).Pages = pagesRef;
+  const catalog = w.refsMap.get(1)!.dict as Record<string, unknown>;
+  catalog.Pages = pagesRef;
+
+  const outlines: { title: string, pageIdx: number }[] = [];
 
   const pages: Page[] = [];
   const embeddedFonts: Record<string, EmbeddedFont & { usedGidToUnicode: [number, string][] }> = {};
@@ -150,8 +155,46 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
         const dict = w.refsMap.get(infoRef.id)!.dict as Record<string, unknown>;
         dict[key] = value;
     },
+    addOutline(title: string, pageIdx: number): void {
+        outlines.push({ title, pageIdx });
+    },
     save(): Uint8Array {
       for (const p of pages) finalizePageContent(p, w);
+
+      // Handle Outlines (Bookmarks)
+      if (outlines.length > 0) {
+          const rootOutlineRef = w.allocId();
+          const firstOutlineRef = w.allocId();
+          const lastOutlineRef = w.allocId();
+
+          const outlineRefs: PdfRef[] = outlines.map(() => ({ id: w.allocId(), gen: 0 }));
+
+          for (let i = 0; i < outlines.length; i++) {
+              const item = outlines[i];
+              const currentRef = outlineRefs[i];
+              const dict: any = {
+                  Title: item.title,
+                  Parent: { id: rootOutlineRef, gen: 0 },
+                  Dest: [pageRefs[item.pageIdx], name('Fit')],
+              };
+              if (i > 0) dict.Prev = outlineRefs[i - 1];
+              if (i < outlines.length - 1) dict.Next = outlineRefs[i + 1];
+
+              w.objectsList.push({ id: currentRef.id, gen: 0, kind: 'dict', dict });
+              w.refsMap.set(currentRef.id, w.objectsList[w.objectsList.length - 1]);
+          }
+
+          const rootOutlineDict = {
+              Type: name('Outlines'),
+              First: outlineRefs[0],
+              Last: outlineRefs[outlineRefs.length - 1],
+              Count: outlines.length,
+          };
+          w.objectsList.push({ id: rootOutlineRef, gen: 0, kind: 'dict', dict: rootOutlineDict });
+          w.refsMap.set(rootOutlineRef, w.objectsList[w.objectsList.length - 1]);
+          
+          catalog.Outlines = { id: rootOutlineRef, gen: 0 };
+      }
       
       for (const embedded of Object.values(embeddedFonts)) {
         if (embedded.usedGidToUnicode.length > 0) {

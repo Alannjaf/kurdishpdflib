@@ -66,6 +66,12 @@ export class KurdPDF {
         return this;
     }
 
+    addBookmark(title: string, pageIdx: number) {
+        if (!this.doc) throw new Error("Document not initialized.");
+        this.doc.addOutline(title, pageIdx);
+        return this;
+    }
+
     addLink(url: string, x: number, y: number, width: number, height: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         this.currentPage.addLink(url, x, y, width, height);
