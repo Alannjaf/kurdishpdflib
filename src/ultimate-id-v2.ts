@@ -12,14 +12,16 @@ const pngPath = join(__dirname, '..', 'assets', 'transparent-sample.png');
 const svgPath = join(__dirname, '..', 'assets', 'Logo.svg');
 
 // Modern Color Palette
+// Deep Premium Palette
 const COLORS = {
-    NAVY: '#0a192f',
-    DARK_BLUE: '#112240',
-    LIGHT_BLUE: '#3dc7f4',
-    GOLD: '#f6ad55',
-    WHITE: '#ffffff',
-    GREY: '#a8b2d1',
-    RED: '#e74c3c'
+    OBSIDIAN: '#020617',
+    MIDNIGHT: '#0f172a',
+    ELECTRIC: '#3b82f6',
+    CYAN: '#06b6d4',
+    GOLD: '#fbbf24',
+    WHITE: '#f8fafc',
+    SLATE: '#94a3b8',
+    RED: '#ef4444'
 };
 
 async function main() {
@@ -49,7 +51,8 @@ async function main() {
     doc.saveGraphicsState();
     doc.rect(0, 0, W, H, 'N');
     doc.clip();
-    doc.gradient([{ offset: 0, color: COLORS.NAVY }, { offset: 1, color: COLORS.DARK_BLUE }], 0, H, W, 0);
+    // Vibrant Diagonal Gradient: Top-Right to Bottom-Left
+    doc.gradient([{ offset: 0, color: COLORS.MIDNIGHT }, { offset: 1, color: COLORS.OBSIDIAN }], W, H, 0, 0);
     doc.restoreGraphicsState();
 
     // 2. Render Layout Content
@@ -60,7 +63,7 @@ async function main() {
             // Layer 1: Watermark
             {
                 type: 'box',
-                options: { width: W, height: H, align: 'center', opacity: 0.08 },
+                options: { width: W, height: H, align: 'center', opacity: 0.05 },
                 child: { type: 'svg', content: svgContent, width: 120, height: 120, options: { scale: 1.5 } }
             },
             // Layer 2: Content
@@ -72,25 +75,25 @@ async function main() {
                         type: 'hstack',
                         options: { align: 'space-between', height: 25 },
                         children: [
-                            { type: 'svg', content: svgContent, width: 25, height: 25, options: { scale: 0.35 } },
+                            { type: 'svg', content: svgContent, width: 25, height: 25, options: { scale: 0.35, color: COLORS.ELECTRIC } },
                             {
                                 type: 'vstack',
                                 options: { align: 'end' },
                                 children: [
-                                    { type: 'text', content: 'GLOBAL MEMBER', options: { size: 8, color: COLORS.LIGHT_BLUE } },
+                                    { type: 'text', content: 'GLOBAL MEMBER', options: { size: 8, color: COLORS.CYAN } },
                                     { type: 'text', content: 'ئەندامی جیهانی', options: { size: 7, color: COLORS.WHITE, rtl: true } }
                                 ]
                             }
                         ]
                     },
-                    { type: 'rect', width: 223, height: 1, options: { style: 'F', color: COLORS.LIGHT_BLUE, opacity: 0.3 } },
+                    { type: 'rect', width: 223, height: 1, options: { style: 'F', color: COLORS.ELECTRIC, opacity: 0.2 } },
                     {
                         type: 'hstack',
                         options: { gap: 10, align: 'start' },
                         children: [
                             {
                                 type: 'box',
-                                options: { width: 60, height: 75, borderRadius: 8, borderWidth: 1.5, borderColor: COLORS.GOLD, backgroundColor: COLORS.DARK_BLUE },
+                                options: { width: 60, height: 75, borderRadius: 8, borderWidth: 1.2, borderColor: COLORS.GOLD, backgroundColor: COLORS.OBSIDIAN },
                                 child: { type: 'image', data: photoBytes, imgType: 'jpeg', width: 60, height: 75, options: { objectFit: 'cover' } }
                             },
                             {
@@ -98,22 +101,22 @@ async function main() {
                                 options: { width: 140, gap: 4 },
                                 children: [
                                     { type: 'text', content: 'ALAN JAFF', options: { size: 14, color: COLORS.WHITE } },
-                                    { type: 'text', content: 'ئالان جاف', options: { size: 12, color: COLORS.GREY, rtl: true } },
+                                    { type: 'text', content: 'ئالان جاف', options: { size: 12, color: COLORS.SLATE, rtl: true } },
                                     { type: 'spacer', size: 2 },
                                     {
                                         type: 'box',
-                                        options: { backgroundColor: COLORS.LIGHT_BLUE, padding: [2, 8], borderRadius: 4 },
-                                        child: { type: 'text', content: 'SENIOR DEVELOPER', options: { size: 7, color: COLORS.NAVY } }
+                                        options: { backgroundColor: COLORS.ELECTRIC, padding: [2, 8], borderRadius: 4 },
+                                        child: { type: 'text', content: 'SENIOR DEVELOPER', options: { size: 7, color: COLORS.WHITE } }
                                     },
-                                    { type: 'text', content: 'ID: 2396-59674', options: { size: 8, color: COLORS.GREY } }
+                                    { type: 'text', content: 'ID: 2396-59674', options: { size: 8, color: COLORS.SLATE } }
                                 ]
                             }
                         ]
                     },
                     {
                         type: 'box',
-                        options: { width: 223, height: 15, align: 'center', backgroundColor: COLORS.DARK_BLUE, borderRadius: 4 },
-                        child: { type: 'text', content: 'Kurd-PDFLib Verified • ٢٠٢٦', options: { size: 7, color: COLORS.GREY, rtl: true } }
+                        options: { width: 223, height: 15, align: 'center', backgroundColor: COLORS.MIDNIGHT, borderRadius: 4 },
+                        child: { type: 'text', content: 'Kurd-PDFLib Verified • ٢٠٢٦', options: { size: 7, color: COLORS.SLATE, rtl: true } }
                     }
                 ]
             }
@@ -124,7 +127,7 @@ async function main() {
     // BACK SIDE (Page 2)
     // ==========================================
     doc.addPage(W, H);
-    doc.rect(0, 0, W, H, 'F', COLORS.NAVY);
+    doc.rect(0, 0, W, H, 'F', COLORS.OBSIDIAN);
 
     const termsText = `ئەم ناسنامەیە تەنها بۆ بەکارهێنانی فەرمییە. بەکارهێنانی ئەم سیستەمە نیشانەی لێهاتوویی پەرەپێدەرە. پەرەپێدانی ئەم کتێبخانەیە هەنگاوێکە بەرەو دیجیتاڵکردنی زمانی کوردی. ٢٠٢٦`;
 
@@ -135,11 +138,11 @@ async function main() {
             { type: 'text', content: 'TERMS AND CONDITIONS', options: { size: 8, color: COLORS.GOLD } },
             {
                 type: 'box',
-                options: { width: 213, padding: 8, backgroundColor: COLORS.DARK_BLUE, borderRadius: 6, align: 'center' },
+                options: { width: 213, padding: 8, backgroundColor: COLORS.MIDNIGHT, borderRadius: 6, align: 'center' },
                 child: {
                     type: 'text',
                     content: termsText,
-                    options: { size: 7, width: 197, align: 'justify', color: COLORS.GREY, lineHeight: 1.5, rtl: true }
+                    options: { size: 7, width: 197, align: 'justify', color: COLORS.SLATE, lineHeight: 1.5, rtl: true }
                 }
             },
             {
@@ -155,9 +158,9 @@ async function main() {
                         type: 'vstack',
                         options: { align: 'end', gap: 2 },
                         children: [
-                            { type: 'text', content: 'AUTHORIZED SIGNATURE', options: { size: 6, color: COLORS.GREY } },
+                            { type: 'text', content: 'AUTHORIZED SIGNATURE', options: { size: 6, color: COLORS.SLATE } },
                             { type: 'rect', width: 100, height: 0.5, options: { style: 'F', color: COLORS.GOLD } },
-                            { type: 'text', content: 'واژۆی فەرمی', options: { size: 6, color: COLORS.GREY, rtl: true } }
+                            { type: 'text', content: 'واژۆی فەرمی', options: { size: 6, color: COLORS.SLATE, rtl: true } }
                         ]
                     }
                 ]
