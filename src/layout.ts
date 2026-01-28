@@ -6,6 +6,7 @@ export interface LayoutOptions {
     gap?: number;
     align?: 'start' | 'center' | 'end' | 'space-between' | 'space-evenly';
     backgroundColor?: string;
+    backgroundGradient?: { colors: { offset: number, color: string }[], direction?: 'vertical' | 'horizontal' };
     borderColor?: string;
     borderWidth?: number;
     borderRadius?: number;
@@ -210,18 +211,39 @@ export class LayoutEngine {
         const innerH = h - m.top - m.bottom;
 
         // 1. Draw Background (Fill only) - Drawn FIRST
-        if (options.backgroundColor) {
+        if (options.backgroundColor || options.backgroundGradient) {
             const style = 'F';
             if (options.borderRadius) {
                 this.doc.saveGraphicsState();
                 if (this.doc.roundedRect) {
-                    this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor);
-                    
-                    // Create clipping path for child content
+                    // Create clipping path for background and child content
                     this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); 
+                    
+                    if (options.backgroundGradient) {
+                        const dir = options.backgroundGradient.direction || 'vertical';
+                        const coords: [number, number, number, number] = dir === 'vertical' 
+                            ? [innerX, innerY, innerX, innerY - innerH] 
+                            : [innerX, innerY, innerX + innerW, innerY];
+                        this.doc.gradient(options.backgroundGradient.colors, coords[0], coords[1], coords[2], coords[3]);
+                    } else {
+                        this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor);
+                    }
                 }
             } else {
-                this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor);
+                if (options.backgroundGradient) {
+                    const dir = options.backgroundGradient.direction || 'vertical';
+                    const coords: [number, number, number, number] = dir === 'vertical' 
+                        ? [innerX, innerY, innerX, innerY - innerH] 
+                        : [innerX, innerY, innerX + innerW, innerY];
+                    
+                    this.doc.saveGraphicsState();
+                    this.doc.rect(innerX, innerY - innerH, innerW, innerH, 'N'); // Clip to rect
+                    this.doc.clip();
+                    this.doc.gradient(options.backgroundGradient.colors, coords[0], coords[1], coords[2], coords[3]);
+                    this.doc.restoreGraphicsState();
+                } else {
+                    this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor!);
+                }
             }
         } else if (options.borderRadius) {
              // If no background but rounded, we still need to clip
