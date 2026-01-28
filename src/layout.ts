@@ -167,8 +167,9 @@ export class LayoutEngine {
             if (maxWidth && maxWidth > 0) {
                 const effectiveWidth = maxWidth - (safetyInset * 2);
                 const lines = this.wrapText(el.content, effectiveWidth, size, el.options?.font, el.options?.rtl);
-                let currentY = contentY;
                 const lineHeight = size * lineHeightVal;
+                // Move first line down so it's not at the very top of the content area
+                let currentY = contentY - size;
                 
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];

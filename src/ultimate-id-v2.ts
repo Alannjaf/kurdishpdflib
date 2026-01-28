@@ -135,7 +135,7 @@ async function main() {
             { type: 'text', content: 'TERMS AND CONDITIONS', options: { size: 8, color: COLORS.GOLD } },
             {
                 type: 'box',
-                options: { width: 213, padding: 8, backgroundColor: COLORS.DARK_BLUE, borderRadius: 6 },
+                options: { width: 213, padding: 8, backgroundColor: COLORS.DARK_BLUE, borderRadius: 6, align: 'center' },
                 child: {
                     type: 'text',
                     content: termsText,
