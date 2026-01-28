@@ -8,41 +8,66 @@ export interface PathPoint {
 
 export interface SVGPath {
     points: PathPoint[];
-    color?: string;
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
 }
 
-const colorMap: Record<string, string> = {
-    'cls-1': '#FFFFFF', // white
-    'cls-2': '#939598', // grey
-    'cls-3': '#010403', // black
-    'cls-4': '#ed2224', // red
-    'cls-5': '#3dc7f4', // blue
-};
-
-export function parseSVG(svgContent: string): SVGPath[] {
+export function parseSVG(svgContent: string): { paths: SVGPath[], viewBox?: { x: number, y: number, w: number, h: number } } {
     const paths: SVGPath[] = [];
     
+    const viewBoxMatch = svgContent.match(/viewBox="([^"]+)"/);
+    let viewBox;
+    if (viewBoxMatch) {
+        const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(parseFloat);
+        if (parts.length === 4) {
+            viewBox = { x: parts[0], y: parts[1], w: parts[2], h: parts[3] };
+        }
+    }
+
+    const getStyle = (attributes: string): { fill?: string, stroke?: string, strokeWidth?: number } => {
+        const fillMatch = attributes.match(/fill="([^"]+)"/);
+        const strokeMatch = attributes.match(/stroke="([^"]+)"/);
+        const strokeWidthMatch = attributes.match(/stroke-width="([^"]+)"/);
+        
+        const styleMatch = attributes.match(/style="([^"]+)"/);
+        let fill = fillMatch ? fillMatch[1] : undefined;
+        let stroke = strokeMatch ? strokeMatch[1] : undefined;
+        let strokeWidth = strokeWidthMatch ? parseFloat(strokeWidthMatch[1]) : undefined;
+
+        if (styleMatch) {
+            const styles = styleMatch[1].split(';');
+            for (const s of styles) {
+                const [k, v] = s.split(':').map(x => x.trim());
+                if (k === 'fill') fill = v;
+                if (k === 'stroke') stroke = v;
+                if (k === 'stroke-width') strokeWidth = parseFloat(v);
+            }
+        }
+
+        // Handle named colors or "none"
+        if (fill === 'none') fill = undefined;
+        if (stroke === 'none') stroke = undefined;
+
+        return { fill, stroke, strokeWidth };
+    };
+    
+    // Path support
     const pathRegex = /<path\s+([^>]+)>/g;
     let match;
-
     while ((match = pathRegex.exec(svgContent)) !== null) {
         const attributes = match[1];
-        
         const dMatch = attributes.match(/d="([^"]+)"/);
         if (!dMatch) continue;
-        const d = dMatch[1];
-
-        const classMatch = attributes.match(/class="([^"]+)"/);
-        const className = classMatch ? classMatch[1] : '';
-        const color = colorMap[className];
-
+        
+        const style = getStyle(attributes);
         paths.push({
-            points: parseSVGPathData(d),
-            color: color
+            points: parseSVGPathData(dMatch[1]),
+            ...style
         });
     }
     
-    // Polygon support (points="x1 y1 x2 y2...")
+    // Polygon support
     const polyRegex = /<polygon\s+([^>]+)>/g;
     while ((match = polyRegex.exec(svgContent)) !== null) {
         const attributes = match[1];
@@ -53,18 +78,66 @@ export function parseSVG(svgContent: string): SVGPath[] {
              for(let i=0; i<pts.length; i+=2) {
                  pathPoints.push({ x: pts[i], y: pts[i+1], type: i===0 ? 'M' : 'L' });
              }
-             if (pathPoints.length > 0) {
-                 // Close it
-                 pathPoints.push({ x: pathPoints[0].x, y: pathPoints[0].y, type: 'L' });
-             }
+             if (pathPoints.length > 0) pathPoints.push({ x: pathPoints[0].x, y: pathPoints[0].y, type: 'L' });
              
-             const classMatch = attributes.match(/class="([^"]+)"/);
-             const className = classMatch ? classMatch[1] : '';
-             paths.push({ points: pathPoints, color: colorMap[className] });
+             const style = getStyle(attributes);
+             paths.push({ points: pathPoints, ...style });
         }
     }
 
-    return paths;
+    // Rect support
+    const rectRegex = /<rect\s+([^>]+)>/g;
+    while ((match = rectRegex.exec(svgContent)) !== null) {
+        const attrs = match[1];
+        const x = parseFloat(attrs.match(/x="([^"]+)"/)?.[1] || '0');
+        const y = parseFloat(attrs.match(/y="([^"]+)"/)?.[1] || '0');
+        const w = parseFloat(attrs.match(/width="([^"]+)"/)?.[1] || '0');
+        const h = parseFloat(attrs.match(/height="([^"]+)"/)?.[1] || '0');
+        
+        const style = getStyle(attrs);
+        paths.push({
+            points: [
+                { x, y, type: 'M' },
+                { x: x + w, y, type: 'L' },
+                { x: x + w, y: y + h, type: 'L' },
+                { x, y: y + h, type: 'L' },
+                { x, y: y, type: 'L' }
+            ],
+            ...style
+        });
+    }
+
+    // Circle support
+    const circleRegex = /<circle\s+([^>]+)>/g;
+    while ((match = circleRegex.exec(svgContent)) !== null) {
+        const attrs = match[1];
+        const cx = parseFloat(attrs.match(/cx="([^"]+)"/)?.[1] || '0');
+        const cy = parseFloat(attrs.match(/cy="([^"]+)"/)?.[1] || '0');
+        const r = parseFloat(attrs.match(/r="([^"]+)"/)?.[1] || '0');
+        
+        const style = getStyle(attrs);
+        
+        // Convert circle to 4 cubic beziers
+        const k = 0.552284749831;
+        const kr = r * k;
+        
+        paths.push({
+            points: [
+                { x: cx + r, y: cy, type: 'M' },
+                { x: cx + r, y: cy + kr, type: 'C', cp1: {x: cx + r, y: cy + kr}, cp2: {x: cx + kr, y: cy + r} },
+                { x: cx, y: cy + r, type: 'L' },
+                { x: cx - kr, y: cy + r, type: 'C', cp1: {x: cx - kr, y: cy + r}, cp2: {x: cx - r, y: cy + kr} },
+                { x: cx - r, y: cy, type: 'L' },
+                { x: cx - r, y: cy - kr, type: 'C', cp1: {x: cx - r, y: cy - kr}, cp2: {x: cx - kr, y: cy - r} },
+                { x: cx, y: cy - r, type: 'L' },
+                { x: cx + kr, y: cy - r, type: 'C', cp1: {x: cx + kr, y: cy - r}, cp2: {x: cx + r, y: cy - kr} },
+                { x: cx + r, y: cy, type: 'L' }
+            ],
+            ...style
+        });
+    }
+
+    return { paths, viewBox };
 }
 
 function parseSVGPathData(d: string): PathPoint[] {

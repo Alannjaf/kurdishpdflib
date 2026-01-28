@@ -644,23 +644,36 @@ export class KurdPDF {
         return this;
     }
 
-    svg(svgContent: string, x: number, y: number, options: { scale?: number, color?: string, style?: 'F'|'S'|'FD' } = {}) {
+    svg(svgContent: string, x: number, y: number, options: { width?: number, height?: number, scale?: number, color?: string } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
         
-        const scale = options.scale || 1.0;
+        const { paths, viewBox } = parseSVG(svgContent);
         
-        const paths = parseSVG(svgContent);
+        let scaleX = options.scale || 1.0;
+        let scaleY = options.scale || 1.0;
+
+        if (viewBox && options.width) {
+            scaleX = options.width / viewBox.w;
+            scaleY = options.height ? options.height / viewBox.h : scaleX;
+        }
+
+        const offsetX = viewBox ? viewBox.x : 0;
+        const offsetY = viewBox ? viewBox.y : 0;
         
         for (const path of paths) {
             const transformedPoints = path.points.map((p: any) => ({
                 ...p,
-                x: x + p.x * scale,
-                y: y - p.y * scale, 
-                cp1: p.cp1 ? { x: x + p.cp1.x * scale, y: y - p.cp1.y * scale } : undefined,
-                cp2: p.cp2 ? { x: x + p.cp2.x * scale, y: y - p.cp2.y * scale } : undefined
+                x: x + (p.x - offsetX) * scaleX,
+                y: y - (p.y - offsetY) * scaleY, 
+                cp1: p.cp1 ? { x: x + (p.cp1.x - offsetX) * scaleX, y: y - (p.cp1.y - offsetY) * scaleY } : undefined,
+                cp2: p.cp2 ? { x: x + (p.cp2.x - offsetX) * scaleX, y: y - (p.cp2.y - offsetY) * scaleY } : undefined
             }));
 
-            this.path(transformedPoints, 'F', options.color || path.color);
+            const fill = options.color || path.fill;
+            const stroke = path.stroke;
+            const style = (fill && stroke) ? 'FD' : fill ? 'F' : 'S';
+
+            this.path(transformedPoints, style, fill || stroke, path.strokeWidth || 1);
         }
         return this;
     }

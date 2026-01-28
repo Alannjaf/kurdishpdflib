@@ -312,6 +312,8 @@ export class LayoutEngine {
             }
         } else if (el.type === 'svg') {
             this.doc.svg(el.content, contentX, contentY, { 
+                width: contentW,
+                height: contentH,
                 scale: el.options?.scale, 
                 color: el.options?.color 
             });
