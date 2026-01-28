@@ -8,6 +8,9 @@ import { parsePNG } from './png.js';
 export interface KurdPDFOptions {
     fonts?: Record<string, { fontBytes: Uint8Array, baseFontName: string }>;
     fallbackOrder?: string[];
+    title?: string;
+    author?: string;
+    subject?: string;
 }
 
 export class KurdPDF {
@@ -17,8 +20,10 @@ export class KurdPDF {
     private fonts: Record<string, { fontBytes: Uint8Array, baseFontName: string }> = {};
     private defaultFont: string | null = null;
     private fallbackOrder: string[] = [];
+    private options: KurdPDFOptions;
 
     constructor(options: KurdPDFOptions = {}) {
+        this.options = options;
         this.fonts = options.fonts || {};
         const fontKeys = Object.keys(this.fonts);
         this.fallbackOrder = options.fallbackOrder || fontKeys;
@@ -39,7 +44,10 @@ export class KurdPDF {
         this.shaper = new TextShaper(hbInstance as unknown as Hb);
         
         this.doc = createDocument({
-            fonts: this.fonts
+            fonts: this.fonts,
+            title: this.options.title,
+            author: this.options.author,
+            subject: this.options.subject
         });
         
         // Start with one page automatically
@@ -48,6 +56,14 @@ export class KurdPDF {
         } else {
             this.addPage(); // Default A4
         }
+    }
+
+    setMetadata(title?: string, author?: string, subject?: string) {
+        if (!this.doc) throw new Error("Document not initialized.");
+        if (title) this.doc.setMetadata('Title', title);
+        if (author) this.doc.setMetadata('Author', author);
+        if (subject) this.doc.setMetadata('Subject', subject);
+        return this;
     }
 
     addPage(width = 595, height = 842) {

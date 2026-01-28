@@ -23,6 +23,10 @@ export interface CreateDocumentOptions {
   /** Legacy single font support */
   fontBytes?: Uint8Array;
   baseFontName?: string;
+  /** Metadata */
+  title?: string;
+  author?: string;
+  subject?: string;
 }
 
 export interface PDFDocument {
@@ -31,6 +35,7 @@ export interface PDFDocument {
   getImageRef(id: string): PdfRef | undefined;
   getOpacityGState(opacity: number): { name: string, ref: PdfRef };
   addShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): { name: string, ref: PdfRef };
+  setMetadata(key: string, value: string): void;
   save(): Uint8Array;
 }
 
@@ -41,9 +46,12 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     Type: name('Catalog'),
     Pages: null as unknown as PdfRef,
   });
-  w.addDict({
+  const infoRef = w.addDict({
     Producer: 'kurd-pdflib',
     CreationDate: datestamp(),
+    Title: opts.title ?? '',
+    Author: opts.author ?? '',
+    Subject: opts.subject ?? '',
   });
 
   const pageRefs: PdfRef[] = [];
@@ -137,6 +145,10 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
         const ref = w.addAxialShading(colors, coords);
         shadingRefs[id] = ref;
         return { name: id, ref };
+    },
+    setMetadata(key: string, value: string): void {
+        const dict = w.refsMap.get(infoRef.id)!.dict as Record<string, unknown>;
+        dict[key] = value;
     },
     save(): Uint8Array {
       for (const p of pages) finalizePageContent(p, w);

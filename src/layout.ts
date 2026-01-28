@@ -53,6 +53,34 @@ export class LayoutEngine {
         this.drawElement(element, x, y, width, height);
     }
 
+    renderFlow(element: LayoutElement, options: { topMargin?: number, bottomMargin?: number, leftMargin?: number } = {}) {
+        const top = options.topMargin ?? 50;
+        const bottom = options.bottomMargin ?? 50;
+        const left = options.leftMargin ?? 0;
+        const pageHeight = 842; // Standard A4
+
+        if (element.type === 'vstack') {
+            const gap = element.options?.gap || 0;
+            let currentY = pageHeight - top;
+
+            element.children.forEach((child) => {
+                const { width, height } = this.calculateSize(child);
+                
+                // If child is too tall for current page, move to next page
+                if (currentY - height < bottom) {
+                    this.doc.addPage();
+                    currentY = pageHeight - top;
+                }
+
+                this.drawElement(child, left, currentY, width, height);
+                currentY -= (height + gap);
+            });
+        } else {
+            // For non-vstack elements, just render normally at the top
+            this.render(element, left, pageHeight - top);
+        }
+    }
+
     getSize(element: LayoutElement) {
         return this.calculateSize(element);
     }

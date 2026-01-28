@@ -12,6 +12,7 @@ A zero-dependency Node.js library for creating PDFs with advanced support for **
 - **Vector Graphics**: Full SVG path parsing and rendering directly into PDF vectors.
 - **Typography Polish**: Automatic text wrapping, cross-script justification (LTR and RTL), and custom line height control.
 - **Opacity**: True alpha transparency support for shapes, paths, and vectors.
+- **Multi-Page Flow**: Automatically break content across pages.
 
 ## Getting Started
 
@@ -19,27 +20,30 @@ A zero-dependency Node.js library for creating PDFs with advanced support for **
 import { KurdPDF, LayoutEngine } from './index.js';
 import { readFileSync } from 'fs';
 
-// 1. Initialize Document with Fonts
+// 1. Initialize Document with Fonts & Metadata
 const doc = new KurdPDF({
     fonts: {
         'AR': { fontBytes: readFileSync('NotoSansArabic.ttf'), baseFontName: 'NotoSansArabic' },
         'EN': { fontBytes: readFileSync('NotoSans.ttf'), baseFontName: 'NotoSans' }
-    }
+    },
+    title: 'Monthly Report',
+    author: 'Alan Jaff'
 });
 await doc.init();
 
 // 2. Initialize Layout Engine
 const layout = new LayoutEngine(doc);
 
-// 3. Render Content (using standard A4 coordinates: top-left is 0, 842)
-layout.render({
+// 3. Render Content with Automatic Page Flow
+const root = {
     type: 'vstack',
-    options: { gap: 20, padding: 30, align: 'center' },
+    options: { gap: 20, padding: 30 },
     children: [
-        { type: 'text', content: 'Hello World', options: { font: 'EN', size: 24 } },
-        { type: 'text', content: 'سڵاو لە جیهان', options: { font: 'AR', size: 24, rtl: true } }
+        { type: 'text', content: 'Long Document Header', options: { font: 'EN', size: 24 } },
+        // ... many more items ...
     ]
-}, 0, 842);
+};
+layout.renderFlow(root, { topMargin: 50, bottomMargin: 50 });
 
 // 4. Save to File
 doc.save('output.pdf');
@@ -50,6 +54,14 @@ doc.save('output.pdf');
 ## The Layout Engine
 
 The `LayoutEngine` handles all coordinate math automatically, allowing you to focus on the structure of your document.
+
+### Rendering Methods
+
+*   **`render(element, x, y)`**: Renders an element at a specific A4 coordinate. Use this for fixed-position elements like headers, footers, or IDs.
+*   **`renderFlow(element, options)`**: Automatically handles **multi-page flow**. It will break a `vstack` across multiple pages if it's too long to fit on one.
+    *   `topMargin`: Space from the top of each page (default 50).
+    *   `bottomMargin`: Space from the bottom before breaking to a new page (default 50).
+    *   `leftMargin`: X-coordinate to start drawing from (default 0).
 
 ### Container Types
 
@@ -73,6 +85,16 @@ Every element and container accepts these options:
 | `borderRadius` | `number` | Radius for rounded corners. **Content is automatically clipped** to this shape. |
 | `opacity` | `number` | Alpha transparency (0.0 to 1.0). Affects the element and all its children. |
 | `align` | `string` | Alignment for children (`start`, `center`, `end`, `space-between`, `space-evenly`). |
+
+---
+
+## Metadata
+
+Set document properties like Title and Author either in the constructor or via `setMetadata`.
+
+```typescript
+doc.setMetadata('Monthly Invoice', 'Alan Jaff', 'Financials');
+```
 
 ---
 
