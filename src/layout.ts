@@ -29,8 +29,17 @@ export type LayoutElement =
     | { type: 'svg', content: string, width: number, height: number, options?: { color?: string, scale?: number } }
     | { type: 'link', url: string, child: LayoutElement, options?: LayoutOptions }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
+    | { type: 'table', headers: (string | LayoutElement)[], rows: (string | LayoutElement)[][], columnWidths?: number[], options?: TableOptions }
     | { type: 'box', child: LayoutElement, options?: LayoutOptions }
     | { type: 'spacer', size: number };
+
+export interface TableOptions extends LayoutOptions {
+    headerBackgroundColor?: string;
+    headerTextColor?: string;
+    alternateRowBackgroundColor?: string;
+    rowPadding?: number;
+    fontSize?: number;
+}
 
 interface SideValues {
     top: number;
@@ -164,6 +173,11 @@ export class LayoutEngine {
             const sizes = el.children.map(c => this.calculateSize(c));
             w = Math.max(...sizes.map(s => s.width), el.options?.width || 0);
             h = Math.max(...sizes.map(s => s.height), el.options?.height || 0);
+        } else if (el.type === 'table') {
+            const tableEl = this.tableToLayout(el);
+            const size = this.calculateSize(tableEl);
+            w = size.width;
+            h = size.height;
         } else if (el.type === 'box' || el.type === 'link') {
             const inner = this.calculateSize(el.child);
             w = inner.width;
@@ -369,6 +383,10 @@ export class LayoutEngine {
                 }
                 this.drawElement(child, contentX + offsetX, contentY - offsetY, size.width, size.height);
             }
+        } else if (el.type === 'table') {
+            const tableEl = this.tableToLayout(el);
+            const size = this.calculateSize(tableEl);
+            this.drawElement(tableEl, x, y, size.width, size.height);
         } else if (el.type === 'link') {
             const size = this.calculateSize(el.child);
             this.doc.addLink(el.url, contentX, contentY - size.height, size.width, size.height);
@@ -427,5 +445,79 @@ export class LayoutEngine {
         }
         if (currentLine.length > 0) lines.push(currentLine.join(' '));
         return lines;
+    }
+
+    private tableToLayout(el: Extract<LayoutElement, { type: 'table' }>): LayoutElement {
+        const { headers, rows, columnWidths, options = {} } = el;
+        const fontSize = options.fontSize || 10;
+        const padding = options.rowPadding || 8;
+        
+        const tableWidth = options.width || 515; // Default A4 content width
+        const colCount = headers.length;
+        const colWidths = columnWidths || Array(colCount).fill(tableWidth / colCount);
+
+        const createCell = (content: string | LayoutElement, isHeader: boolean, colIdx: number): LayoutElement => {
+            const width = colWidths[colIdx];
+            const baseOptions: any = {
+                padding: padding,
+                width: width,
+                borderColor: options.borderColor || '#dee2e6',
+                borderWidth: options.borderWidth || 0.5
+            };
+
+            if (isHeader && options.headerBackgroundColor) {
+                baseOptions.backgroundColor = options.headerBackgroundColor;
+            }
+
+            let child: LayoutElement;
+            if (typeof content === 'string') {
+                const isRtl = /[\u0600-\u06FF]/.test(content);
+                child = { 
+                    type: 'text', 
+                    content, 
+                    options: { 
+                        font: isRtl ? 'AR' : 'EN', 
+                        size: fontSize, 
+                        rtl: isRtl,
+                        color: (isHeader && options.headerTextColor) ? options.headerTextColor : undefined,
+                        width: width - (padding * 2),
+                        align: isRtl ? 'right' : 'left'
+                    } 
+                };
+            } else {
+                child = content;
+            }
+
+            return { type: 'box', child, options: baseOptions };
+        };
+
+        const headerRow: LayoutElement = {
+            type: 'hstack',
+            children: headers.map((h, i) => createCell(h, true, i))
+        };
+
+        const bodyRows: LayoutElement[] = rows.map((row, rowIdx) => {
+            const rowOptions: any = {};
+            if (options.alternateRowBackgroundColor && rowIdx % 2 !== 0) {
+                rowOptions.backgroundColor = options.alternateRowBackgroundColor;
+            }
+            
+            return {
+                type: 'hstack',
+                children: row.map((cell, colIdx) => {
+                    const cellEl = createCell(cell, false, colIdx);
+                    if (rowOptions.backgroundColor) {
+                        (cellEl as any).options.backgroundColor = rowOptions.backgroundColor;
+                    }
+                    return cellEl;
+                })
+            };
+        });
+
+        return {
+            type: 'vstack',
+            options: { ...options, width: tableWidth },
+            children: [headerRow, ...bodyRows]
+        };
     }
 }
