@@ -266,7 +266,7 @@ export class KurdPDF {
         }
 
         if (isLineRtl) {
-            let currentX = drawX + availableWidth;
+            let currentX = drawX + totalWidth;
             for (const run of runs) {
                 const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
                 const numSpaces = run.text.split(' ').length - 1;
