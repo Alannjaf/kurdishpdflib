@@ -75,7 +75,7 @@ async function main() {
                         type: 'hstack',
                         options: { align: 'space-between', height: 25 },
                         children: [
-                            { type: 'svg', content: svgContent, width: 25, height: 25, options: { scale: 0.35, color: COLORS.ELECTRIC } },
+                            { type: 'svg', content: svgContent, width: 25, height: 25, options: { scale: 0.35 } },
                             {
                                 type: 'vstack',
                                 options: { align: 'end' },
