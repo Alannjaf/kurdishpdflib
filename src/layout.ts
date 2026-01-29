@@ -494,27 +494,80 @@ export class LayoutEngine {
         const tableWidth = parentWidth;
         const colCount = headers.length;
         const colWidths = columnWidths || Array(colCount).fill(tableWidth / colCount);
-        const createCell = (content: string | LayoutElement, isHeader: boolean, colIdx: number): LayoutElement => {
-            const width = colWidths[colIdx];
-            const baseOptions: any = { padding: padding, width: width, borderColor: options.borderColor || '#dee2e6', borderWidth: options.borderWidth || 0.5 };
+
+        const createCell = (cellData: any, isHeader: boolean, startColIdx: number): LayoutElement => {
+            let content: string | LayoutElement;
+            let colSpan = 1;
+
+            if (cellData && typeof cellData === 'object' && 'content' in cellData) {
+                content = cellData.content;
+                colSpan = cellData.colSpan || 1;
+            } else {
+                content = cellData;
+            }
+
+            // Calculate combined width for colSpan
+            let width = 0;
+            for (let i = 0; i < colSpan; i++) {
+                width += colWidths[startColIdx + i] || 0;
+            }
+
+            const baseOptions: any = { 
+                padding: padding, 
+                width: width, 
+                borderColor: options.borderColor || '#dee2e6', 
+                borderWidth: options.borderWidth || 0.5 
+            };
+            
             if (isHeader && options.headerBackgroundColor) baseOptions.backgroundColor = options.headerBackgroundColor;
+            
             let child: LayoutElement;
             if (typeof content === 'string') {
                 const isRtl = /[\u0600-\u06FF]/.test(content);
-                child = { type: 'text', content, options: { font: isRtl ? 'AR' : 'EN', size: fontSize, rtl: isRtl, color: (isHeader && options.headerTextColor) ? options.headerTextColor : undefined, width: width - (padding * 2), align: isRtl ? 'right' : 'left' } };
-            } else child = content;
+                child = { 
+                    type: 'text', 
+                    content, 
+                    options: { 
+                        font: isRtl ? 'AR' : 'EN', 
+                        size: fontSize, 
+                        rtl: isRtl, 
+                        color: (isHeader && options.headerTextColor) ? options.headerTextColor : undefined, 
+                        width: width - (padding * 2), 
+                        align: isRtl ? 'right' : 'left' 
+                    } 
+                };
+            } else {
+                child = content;
+            }
             return { type: 'box', child, options: baseOptions };
         };
-        const headerRow: LayoutElement = { type: 'hstack', children: headers.map((h, i) => createCell(h, true, i)) };
-        const bodyRows: LayoutElement[] = rows.map((row, rowIdx) => {
-            const rowOptions: any = {};
-            if (options.alternateRowBackgroundColor && rowIdx % 2 !== 0) rowOptions.backgroundColor = options.alternateRowBackgroundColor;
-            return { type: 'hstack', children: row.map((cell, colIdx) => {
-                const cellEl = createCell(cell, false, colIdx);
-                if (rowOptions.backgroundColor) (cellEl as any).options.backgroundColor = rowOptions.backgroundColor;
-                return cellEl;
-            }) };
+
+        const buildRow = (cells: any[], isHeader: boolean): LayoutElement => {
+            const children: LayoutElement[] = [];
+            let currentCol = 0;
+            for (const cell of cells) {
+                const cellEl = createCell(cell, isHeader, currentCol);
+                children.push(cellEl);
+                // Advance column counter by colSpan
+                const colSpan = (cell && typeof cell === 'object' && 'colSpan' in cell) ? cell.colSpan : 1;
+                currentCol += colSpan;
+            }
+            return { type: 'hstack', children };
+        };
+
+        const headerRow = buildRow(headers, true);
+        const bodyRows = rows.map((row, rowIdx) => {
+            const rowEl = buildRow(row, false);
+            if (options.alternateRowBackgroundColor && rowIdx % 2 !== 0) {
+                (rowEl as any).children.forEach((cell: any) => {
+                    cell.options.backgroundColor = options.alternateRowBackgroundColor;
+                });
+            }
+            return rowEl;
         });
+
+
         return { type: 'vstack', options: { ...options, width: tableWidth }, children: [headerRow, ...bodyRows] };
     }
+
 }
