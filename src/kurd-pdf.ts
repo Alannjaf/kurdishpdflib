@@ -1,6 +1,6 @@
 import { createDocument, type PDFDocument, type CreateDocumentOptions } from './document.js';
 import type { Page, ShapedGlyph } from './page.js';
-import { TextShaper, type Hb } from './shaper.js';
+import { TextShaper, type Hb, type ShapedFont } from './shaper.js';
 import { writeFileSync } from 'fs';
 import { parseSVG } from './svg.js';
 import { parsePNG } from './png.js';
@@ -18,6 +18,7 @@ export class KurdPDF {
     private currentPage: Page | null = null;
     private shaper: TextShaper | null = null;
     private fonts: Record<string, { fontBytes: Uint8Array, baseFontName: string }> = {};
+    private shapedFonts: Map<string, ShapedFont> = new Map();
     private defaultFont: string | null = null;
     private fallbackOrder: string[] = [];
     private options: KurdPDFOptions;
@@ -43,6 +44,11 @@ export class KurdPDF {
         
         this.shaper = new TextShaper(hbInstance as unknown as Hb);
         
+        // Initialize and cache fonts in HarfBuzz
+        for (const [key, fontCfg] of Object.entries(this.fonts)) {
+            this.shapedFonts.set(key, this.shaper.initFont(fontCfg.fontBytes));
+        }
+
         this.doc = createDocument({
             fonts: this.fonts,
             title: this.options.title,
@@ -55,6 +61,18 @@ export class KurdPDF {
             this.addPage(initialPage.width, initialPage.height);
         } else {
             this.addPage(); // Default A4
+        }
+    }
+
+    /**
+     * Clean up HarfBuzz objects from memory.
+     */
+    destroy() {
+        if (this.shaper) {
+            for (const sf of this.shapedFonts.values()) {
+                this.shaper.destroyFont(sf);
+            }
+            this.shapedFonts.clear();
         }
     }
 
@@ -110,10 +128,10 @@ export class KurdPDF {
         if (!this.shaper) return this.defaultFont || 'F1';
         
         for (const fontKey of this.fallbackOrder) {
-            const font = this.fonts[fontKey];
-            if (!font) continue;
+            const sf = this.shapedFonts.get(fontKey);
+            if (!sf) continue;
             // Check if glyph exists (GID > 0)
-            const gid = this.shaper.getGlyphIndex(font.fontBytes, char.codePointAt(0)!);
+            const gid = this.shaper.getGlyphIndex(sf, char.codePointAt(0)!);
             if (gid > 0) return fontKey;
         }
         return this.defaultFont || 'F1';
@@ -187,17 +205,16 @@ export class KurdPDF {
 
         const fontKey = options.font || this.defaultFont || 'F1';
         const rtl = options.rtl ?? false;
+        const sf = this.shapedFonts.get(fontKey);
 
-        if (!this.fonts[fontKey] || !this.shaper) {
+        if (!sf || !this.shaper) {
             console.warn(`Font "${fontKey}" not found or shaper not ready. Returning 0.`);
             return 0;
         }
 
-        const fontBytes = this.fonts[fontKey].fontBytes;
-        const foundUPM = this.shaper.getUPM(fontBytes);
-        const UPM = foundUPM || 1000; 
+        const UPM = sf.upem || 1000; 
         const scale = size / UPM;
-        const shaped = this.shaper.shape(fontBytes, text, { rtl });
+        const shaped = this.shaper.shape(sf, text, { rtl });
         const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
         return totalAdvance * scale;
     }
@@ -351,9 +368,9 @@ export class KurdPDF {
     }
 
     private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number] | [number, number, number, number], wordSpacing: number = 0) {
-        if (this.fonts[fontKey] && this.shaper) {
-            const fontBytes = this.fonts[fontKey].fontBytes;
-            const shaped = this.shaper.shape(fontBytes, text, { rtl });
+        const sf = this.shapedFonts.get(fontKey);
+        if (sf && this.shaper) {
+            const shaped = this.shaper.shape(sf, text, { rtl });
             this.currentPage!.drawShapedRun(shaped, { x, y, size, font: fontKey, rtl, color, wordSpacing });
         } else {
             this.currentPage!.drawText(text, { x, y, size, font: fontKey, color });
@@ -361,23 +378,22 @@ export class KurdPDF {
     }
 
     private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number] | [number, number, number, number]) {
-        if (!this.fonts[fontKey] || !this.shaper) {
+        const sf = this.shapedFonts.get(fontKey);
+        if (!sf || !this.shaper) {
             this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
             return;
         }
 
-        const fontBytes = this.fonts[fontKey].fontBytes;
         const words = text.split(' ');
         let currentLine: string[] = [];
         let currentY = y;
         const lineHeight = size * 1.4; 
 
-        const foundUPM = this.shaper!.getUPM(fontBytes);
-        const UPM = foundUPM || 2048; 
+        const UPM = sf.upem || 2048; 
         const scale = size / UPM;
         
         const measure = (s: string) => {
-            const shaped = this.shaper!.shape(fontBytes, s, { rtl });
+            const shaped = this.shaper!.shape(sf, s, { rtl });
             const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
             return totalAdvance * scale; 
         };

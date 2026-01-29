@@ -17,6 +17,13 @@ export type Hb = {
   shape: (font: unknown, buffer: unknown, features?: string) => void;
 };
 
+export interface ShapedFont {
+  blob: { destroy: () => void };
+  face: { destroy: () => void; upem?: number; getUpem?: () => number };
+  font: { destroy: () => void };
+  upem: number;
+}
+
 export class TextShaper {
   private hb: Hb;
 
@@ -24,55 +31,42 @@ export class TextShaper {
     this.hb = hbInstance;
   }
 
-  getUPM(fontBytes: Uint8Array): number {
-      const blob = this.hb.createBlob(fontBytes);
-      const face = this.hb.createFace(blob, 0);
-      const font = this.hb.createFont(face);
-      // HarfBuzz usually exposes this via face.getUpem() if mapped in the binding
-      // But looking at typical harfbuzzjs bindings, it might not be directly exposed easily 
-      // without looking at the json output of a shape or specific method.
-      // Let's check typical generic methods.
-      // Actually, standard harfbuzzjs 'createFace' returns an object with 'upem'.
-      // Let's try to access it safely.
-      
-      let upem = 1000; // default fallback
-      if ('upem' in face) {
-          upem = (face as any).upem; // Type assertion needed as our Hb type is loose
-      } else if ('getUpem' in face) {
-          upem = (face as any).getUpem();
-      }
+  initFont(fontBytes: Uint8Array): ShapedFont {
+    const blob = this.hb.createBlob(fontBytes);
+    const face = this.hb.createFace(blob, 0) as any;
+    const font = this.hb.createFont(face);
+    
+    let upem = 1000;
+    if ('upem' in face) {
+        upem = face.upem;
+    } else if ('getUpem' in face) {
+        upem = face.getUpem();
+    }
 
-      font.destroy();
-      face.destroy();
-      blob.destroy();
-      return upem;
+    return { blob, face, font, upem };
   }
 
-  getGlyphIndex(fontBytes: Uint8Array, code: number): number {
-      const blob = this.hb.createBlob(fontBytes);
-      const face = this.hb.createFace(blob, 0);
-      const font = this.hb.createFont(face);
+  destroyFont(sf: ShapedFont) {
+    sf.font.destroy();
+    sf.face.destroy();
+    sf.blob.destroy();
+  }
+
+  getGlyphIndex(sf: ShapedFont, code: number): number {
       const buffer = this.hb.createBuffer();
       
       buffer.addText(String.fromCodePoint(code));
       buffer.guessSegmentProperties();
-      this.hb.shape(font, buffer);
+      this.hb.shape(sf.font, buffer);
       
       const arr = buffer.json();
       const gid = arr.length > 0 ? arr[0].g : 0;
 
       buffer.destroy();
-      font.destroy();
-      face.destroy();
-      blob.destroy();
-      
       return gid;
   }
 
-  shape(fontBytes: Uint8Array, text: string, options: { rtl?: boolean } = {}): ShapedGlyph[] {
-    const blob = this.hb.createBlob(fontBytes);
-    const face = this.hb.createFace(blob, 0);
-    const font = this.hb.createFont(face);
+  shape(sf: ShapedFont, text: string, options: { rtl?: boolean } = {}): ShapedGlyph[] {
     const buffer = this.hb.createBuffer();
     
     buffer.addText(text);
@@ -83,14 +77,11 @@ export class TextShaper {
     }
     buffer.guessSegmentProperties();
     
-    this.hb.shape(font, buffer);
+    this.hb.shape(sf.font, buffer);
     const arr = buffer.json();
     
     // Cleanup
     buffer.destroy();
-    font.destroy();
-    face.destroy();
-    blob.destroy();
 
     // Reconstruct glyphs with mapping to original unicode for PDF extraction
     const clusterStarts = Array.from(new Set(arr.map(g => g.cl))).sort((a, b) => a - b);
