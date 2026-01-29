@@ -4,6 +4,7 @@ export interface LayoutOptions {
     padding?: number | [number, number] | [number, number, number, number]; // uniform | [v, h] | [t, r, b, l]
     margin?: number | [number, number] | [number, number, number, number];
     gap?: number;
+    flex?: number;
     align?: 'start' | 'center' | 'end' | 'space-between' | 'space-evenly';
     backgroundColor?: string;
     backgroundGradient?: { colors: { offset: number, color: string }[], direction?: 'vertical' | 'horizontal' };
@@ -196,10 +197,42 @@ export class LayoutEngine {
             h = el.size;
         } else if (el.type === 'vstack') {
             const gap = el.options?.gap || 0;
-            // Children of vstack inherit the context width and can fill it
-            const sizes = el.children.map(c => this.calculateSize(c, childContextWidth, false));
+            const pSides = parseSides(el.options?.padding);
+            const childContextWidth = (explicitWidth || parentWidth) - pSides.left - pSides.right;
+
+            // First pass: calculate size of fixed children and identify flex children
+            const flexChildren: { idx: number, flex: number }[] = [];
+            let totalFixedBaseHeight = 0;
+            const sizes = new Array(el.children.length);
+
+            el.children.forEach((child, i) => {
+                const flex = (child as any).options?.flex || 0;
+                if (flex > 0) {
+                    flexChildren.push({ idx: i, flex });
+                } else {
+                    const size = this.calculateSize(child, childContextWidth, false);
+                    sizes[i] = size;
+                    totalFixedBaseHeight += size.height;
+                }
+            });
+
+            // Second pass: distribute remaining height to flex children if vstack has an explicit height
+            const totalGapHeight = el.children.length > 1 ? (el.children.length - 1) * gap : 0;
+            const availableHeight = explicitHeight ? (explicitHeight - pSides.top - pSides.bottom - totalGapHeight) : 0;
+            const remainingHeight = Math.max(0, availableHeight - totalFixedBaseHeight);
+            const totalFlex = flexChildren.reduce((sum, c) => sum + c.flex, 0);
+
+            flexChildren.forEach(cf => {
+                const allocatedH = (cf.flex / totalFlex) * remainingHeight;
+                sizes[cf.idx] = this.calculateSize(el.children[cf.idx], childContextWidth, false);
+                sizes[cf.idx].height = allocatedH;
+            });
+
             w = explicitWidth || (shrink ? Math.max(...sizes.map(s => s.width), 0) : childContextWidth);
-            h = explicitHeight || (sizes.reduce((acc, s) => acc + s.height, 0) + (el.children.length > 0 ? (el.children.length - 1) * gap : 0));
+            h = explicitHeight || (sizes.reduce((acc, s) => acc + s.height, 0) + totalGapHeight);
+            
+            // Store sizes for the draw pass
+            (el as any)._calculatedSizes = sizes;
         } else if (el.type === 'hstack') {
             const gap = el.options?.gap || 0;
             // Children of hstack shrink to fit (inline behavior)
@@ -329,13 +362,13 @@ export class LayoutEngine {
             this.doc.svg(el.content, contentX, contentY, { width: contentW, height: contentH, scale: el.options?.scale, color: el.options?.color });
         } else if (el.type === 'vstack') {
             const gap = options.gap || 0;
-            const childrenSizes = el.children.map(c => this.calculateSize(c, contentW, false));
+            const childrenSizes = (el as any)._calculatedSizes || el.children.map(c => this.calculateSize(c, contentW, false));
             let effectiveGap = gap;
             if (options.align === 'space-between' && el.children.length > 1) {
-                const totalChildHeight = childrenSizes.reduce((a, b) => a + b.height, 0);
+                const totalChildHeight = childrenSizes.reduce((a: number, b: any) => a + b.height, 0);
                 effectiveGap = (contentH - totalChildHeight) / (el.children.length - 1);
             } else if (options.align === 'space-evenly' && el.children.length > 0) {
-                const totalChildHeight = childrenSizes.reduce((a, b) => a + b.height, 0);
+                const totalChildHeight = childrenSizes.reduce((a: number, b: any) => a + b.height, 0);
                 effectiveGap = (contentH - totalChildHeight) / (el.children.length + 1);
             }
             let currentY = contentY;
