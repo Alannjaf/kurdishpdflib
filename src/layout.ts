@@ -235,10 +235,41 @@ export class LayoutEngine {
             (el as any)._calculatedSizes = sizes;
         } else if (el.type === 'hstack') {
             const gap = el.options?.gap || 0;
-            // Children of hstack shrink to fit (inline behavior)
-            const sizes = el.children.map(c => this.calculateSize(c, childContextWidth, true));
-            w = explicitWidth || (sizes.reduce((acc, s) => acc + s.width, 0) + (el.children.length > 0 ? (el.children.length - 1) * gap : 0));
+            const pSides = parseSides(el.options?.padding);
+            const childContextWidth = (explicitWidth || parentWidth) - pSides.left - pSides.right;
+
+            // First pass: fixed children
+            const flexChildren: { idx: number, flex: number }[] = [];
+            let totalFixedBaseWidth = 0;
+            const sizes = new Array(el.children.length);
+
+            el.children.forEach((child, i) => {
+                const flex = (child as any).options?.flex || 0;
+                if (flex > 0) {
+                    flexChildren.push({ idx: i, flex });
+                } else {
+                    const size = this.calculateSize(child, childContextWidth, true);
+                    sizes[i] = size;
+                    totalFixedBaseWidth += size.width;
+                }
+            });
+
+            // Second pass: distribute width
+            const totalGapWidth = el.children.length > 1 ? (el.children.length - 1) * gap : 0;
+            const availableWidth = childContextWidth - totalGapWidth;
+            const remainingWidth = Math.max(0, availableWidth - totalFixedBaseWidth);
+            const totalFlex = flexChildren.reduce((sum, c) => sum + c.flex, 0);
+
+            flexChildren.forEach(cf => {
+                const allocatedW = totalFlex > 0 ? (cf.flex / totalFlex) * remainingWidth : 0;
+                sizes[cf.idx] = this.calculateSize(el.children[cf.idx], allocatedW, false);
+                sizes[cf.idx].width = allocatedW;
+            });
+
+            w = explicitWidth || (sizes.reduce((acc, s) => acc + s.width, 0) + totalGapWidth);
             h = explicitHeight || Math.max(...sizes.map(s => s.height), 0);
+            
+            (el as any)._calculatedSizes = sizes;
         } else if (el.type === 'zstack') {
             const sizes = el.children.map(c => this.calculateSize(c, childContextWidth, false));
             w = explicitWidth || (shrink ? Math.max(...sizes.map(s => s.width), 0) : childContextWidth);
@@ -383,13 +414,13 @@ export class LayoutEngine {
             });
         } else if (el.type === 'hstack') {
             const gap = options.gap || 0;
-            const childrenSizes = el.children.map(c => this.calculateSize(c, contentW, true));
+            const childrenSizes = (el as any)._calculatedSizes || el.children.map(c => this.calculateSize(c, contentW, true));
             let effectiveGap = gap;
             if (options.align === 'space-between' && el.children.length > 1) {
-                const totalChildWidth = childrenSizes.reduce((a, b) => a + b.width, 0);
+                const totalChildWidth = childrenSizes.reduce((a: number, b: any) => a + b.width, 0);
                 effectiveGap = (contentW - totalChildWidth) / (el.children.length - 1);
             } else if (options.align === 'space-evenly' && el.children.length > 0) {
-                const totalChildWidth = childrenSizes.reduce((a, b) => a + b.width, 0);
+                const totalChildWidth = childrenSizes.reduce((a: number, b: any) => a + b.width, 0);
                 effectiveGap = (contentW - totalChildWidth) / (el.children.length + 1);
             }
             let currentX = contentX;
