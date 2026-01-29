@@ -252,11 +252,16 @@ export class KurdPDF {
     private parseColorHex(c?: string): [number, number, number] | [number, number, number, number] | undefined {
          if (!c) return undefined;
          if (c.startsWith('#')) {
-             // ... existing RGB hex logic ...
-             const r = parseInt(c.slice(1, 3), 16) / 255;
-             const g = parseInt(c.slice(3, 5), 16) / 255;
-             const b = parseInt(c.slice(5, 7), 16) / 255;
-             return [r, g, b];
+             let hex = c.slice(1);
+             if (hex.length === 3) {
+                 hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+             }
+             if (hex.length === 6) {
+                 const r = parseInt(hex.slice(0, 2), 16) / 255;
+                 const g = parseInt(hex.slice(2, 4), 16) / 255;
+                 const b = parseInt(hex.slice(4, 6), 16) / 255;
+                 return [r, g, b];
+             }
          }
          if (c.startsWith('cmyk(')) {
              // cmyk(100%, 0%, 50%, 10%)
@@ -397,24 +402,48 @@ export class KurdPDF {
     }
 
     private drawLineAligned(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: string, color?: [number, number, number] | [number, number, number, number]) {
-        const width = this.measureText(text, size, { font: fontKey, rtl });
-        let drawX = x;
-        let wordSpacing = 0;
+        const totalWidth = this.measureText(text, size, { font: fontKey, rtl });
+        
+        // Safety inset matches drawRunsAligned
+        const safetyInset = 1.0;
+        const availableWidth = maxWidth - (safetyInset * 2);
+        let drawX = x + safetyInset;
 
-        if (align === 'justify' && maxWidth > width) {
-            const spaceCount = text.split(' ').length - 1;
+        if (align === 'center') drawX += (availableWidth - totalWidth) / 2;
+        else if (align === 'right') drawX += (availableWidth - totalWidth);
+
+        const runs = this.splitIntoRuns(text);
+        const isLineRtl = runs.some(r => r.isRtl);
+
+        let wordSpacing = 0;
+        if (align === 'justify' && availableWidth > totalWidth) {
+            const spaceCount = text.trim().split(/\s+/).length - 1;
             if (spaceCount > 0) {
-                wordSpacing = (maxWidth - width) / spaceCount;
+                wordSpacing = (availableWidth - totalWidth) / spaceCount;
             }
         }
 
-        if (align === 'center') {
-            drawX = x + (maxWidth - width) / 2;
-        } else if (align === 'right') {
-             drawX = x + (maxWidth - width);
+        if (isLineRtl) {
+            let currentX = (align === 'justify') ? (x + safetyInset + availableWidth) : (drawX + totalWidth);
+            for (const run of runs) {
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const numSpaces = run.text.split(' ').length - 1;
+                const justifiedRunW = runW + (numSpaces * wordSpacing);
+                
+                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, color, wordSpacing);
+                currentX -= justifiedRunW;
+            }
+        } else {
+            let currentX = drawX;
+            for (const run of runs) {
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const numSpaces = run.text.split(' ').length - 1;
+                const justifiedRunW = runW + (numSpaces * wordSpacing);
+
+                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color, wordSpacing);
+                currentX += justifiedRunW;
+            }
         }
-        
-        this.drawSingleLine(text, drawX, y, size, fontKey, rtl, color, wordSpacing);
     }
 
     rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
@@ -559,22 +588,54 @@ export class KurdPDF {
          return this;
     }
 
-    roundedRect(x: number, y: number, w: number, h: number, r: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
+    roundedRect(x: number, y: number, w: number, h: number, r: number | number[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const k = 0.552284749831;
-        const kr = r * k;
+        
+        // Handle asymmetric corners if r is an array [tl, tr, br, bl]
+        let rs: number[];
+        if (Array.isArray(r)) {
+            rs = r.map(v => typeof v === 'number' ? v : 0);
+        } else {
+            const val = typeof r === 'number' ? r : 0;
+            rs = [val, val, val, val];
+        }
+        
+        const [rtl, rtr, rbr, rbl] = rs;
+
         const points = [
-            { x: x, y: y + h - r, type: 'M' },
-            { x: x, y: y + r, type: 'L' },
-            { x: x + r, y: y, type: 'C', cp1: {x: x, y: y + r - kr}, cp2: {x: x + r - kr, y: y} },
-            { x: x + w - r, y: y, type: 'L' },
-            { x: x + w, y: y + r, type: 'C', cp1: {x: x + w - r + kr, y: y}, cp2: {x: x + w, y: y + r - kr} },
-            { x: x + w, y: y + h - r, type: 'L' },
-            { x: x + w - r, y: y + h, type: 'C', cp1: {x: x + w, y: y + h - r + kr}, cp2: {x: x + w - r + kr, y: y + h} },
-            { x: x + r, y: y + h, type: 'L' },
-            { x: x, y: y + h - r, type: 'C', cp1: {x: x + r - kr, y: y + h}, cp2: {x: x, y: y + h - r + kr} }
+            // Start at top-left (after the curve)
+            { x: x, y: y + h - rtl, type: 'M' },
+            // Left edge to bottom-left
+            { x: x, y: y + rbl, type: 'L' },
+            // Bottom-left curve
+            { x: x + rbl, y: y, type: 'C', cp1: {x: x, y: y + rbl - rbl * k}, cp2: {x: x + rbl - rbl * k, y: y} },
+            // Bottom edge to bottom-right
+            { x: x + w - rbr, y: y, type: 'L' },
+            // Bottom-right curve
+            { x: x + w, y: y + rbr, type: 'C', cp1: {x: x + w - rbr + rbr * k, y: y}, cp2: {x: x + w, y: y + rbr - rbr * k} },
+            // Right edge to top-right
+            { x: x + w, y: y + h - rtr, type: 'L' },
+            // Top-right curve
+            { x: x + w - rtr, y: y + h, type: 'C', cp1: {x: x + w, y: y + h - rtr + rtr * k}, cp2: {x: x + w - rtr + rtr * k, y: y + h} },
+            // Top edge to top-left
+            { x: x + rtl, y: y + h, type: 'L' },
+            // Top-left curve
+            { x: x, y: y + h - rtl, type: 'C', cp1: {x: x + rtl - rtl * k, y: y + h}, cp2: {x: x, y: y + h - rtl + rtl * k} }
         ] as any;
+
+        // Validation pass to prevent crashes
+        for (const p of points) {
+            if (typeof p.x !== 'number' || isNaN(p.x)) p.x = 0;
+            if (typeof p.y !== 'number' || isNaN(p.y)) p.y = 0;
+            if (p.type === 'C') {
+                if (!p.cp1 || typeof p.cp1.x !== 'number' || isNaN(p.cp1.x)) p.cp1 = { x: 0, y: 0 };
+                if (!p.cp1 || typeof p.cp1.y !== 'number' || isNaN(p.cp1.y)) p.cp1.y = 0;
+                if (!p.cp2 || typeof p.cp2.x !== 'number' || isNaN(p.cp2.x)) p.cp2 = { x: 0, y: 0 };
+                if (!p.cp2 || typeof p.cp2.y !== 'number' || isNaN(p.cp2.y)) p.cp2.y = 0;
+            }
+        }
 
         if (style === 'N') {
             this.clip(points);
