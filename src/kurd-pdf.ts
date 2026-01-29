@@ -512,10 +512,20 @@ export class KurdPDF {
          const parseColor = (c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined => {
              if (!c) return undefined;
              if (Array.isArray(c)) return c;
-             if (c.startsWith('#')) {
-                 const r = parseInt(c.slice(1, 3), 16) / 255;
-                 const g = parseInt(c.slice(3, 5), 16) / 255;
-                 const b = parseInt(c.slice(5, 7), 16) / 255;
+             
+             // Handle basic names
+             const names: Record<string, string> = { 
+                'red': '#ff0000', 'green': '#00ff00', 'blue': '#0000ff', 
+                'black': '#000000', 'white': '#ffffff', 'gold': '#ffd700' 
+             };
+             const target = names[c.toLowerCase()] || c;
+
+             if (target.startsWith('#')) {
+                 let hex = target.slice(1);
+                 if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+                 const r = parseInt(hex.slice(0, 2), 16) / 255;
+                 const g = parseInt(hex.slice(2, 4), 16) / 255;
+                 const b = parseInt(hex.slice(4, 6), 16) / 255;
                  return [r, g, b];
              }
              if (c.startsWith('cmyk(')) {
@@ -799,7 +809,14 @@ export class KurdPDF {
             const stroke = path.stroke;
             const style = (fill && stroke) ? 'FD' : fill ? 'F' : 'S';
 
-            this.path(transformedPoints, style, fill || stroke, path.strokeWidth || 1);
+            if (path.opacity !== undefined) {
+                this.saveGraphicsState();
+                this.setOpacity(path.opacity);
+                this.path(transformedPoints, style, fill || stroke, path.strokeWidth || 1);
+                this.restoreGraphicsState();
+            } else {
+                this.path(transformedPoints, style, fill || stroke, path.strokeWidth || 1);
+            }
         }
         return this;
     }
