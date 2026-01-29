@@ -35,6 +35,7 @@ export interface PDFDocument {
   getImageRef(id: string): PdfRef | undefined;
   getOpacityGState(opacity: number): { name: string, ref: PdfRef };
   addShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): { name: string, ref: PdfRef };
+  addRadialShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number, number, number]): { name: string, ref: PdfRef };
   setMetadata(key: string, value: string): void;
   addOutline(title: string, pageIdx: number): void;
   save(): Uint8Array;
@@ -148,6 +149,13 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
         shadingCount++;
         const id = 'SH' + shadingCount;
         const ref = w.addAxialShading(colors, coords);
+        shadingRefs[id] = ref;
+        return { name: id, ref };
+    },
+    addRadialShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number, number, number]): { name: string, ref: PdfRef } {
+        shadingCount++;
+        const id = 'SH' + shadingCount;
+        const ref = w.addRadialShading(colors, coords);
         shadingRefs[id] = ref;
         return { name: id, ref };
     },

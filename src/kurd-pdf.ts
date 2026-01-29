@@ -808,14 +808,36 @@ export class KurdPDF {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
         
         const parseColor = (c: string): [number, number, number] => {
-             const r = parseInt(c.slice(1, 3), 16) / 255;
-             const g = parseInt(c.slice(3, 5), 16) / 255;
-             const b = parseInt(c.slice(5, 7), 16) / 255;
+             let hex = c.startsWith('#') ? c.slice(1) : c;
+             if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+             const r = parseInt(hex.slice(0, 2), 16) / 255;
+             const g = parseInt(hex.slice(2, 4), 16) / 255;
+             const b = parseInt(hex.slice(4, 6), 16) / 255;
              return [r, g, b];
         };
 
         const stops = colors.map(s => ({ offset: s.offset, color: parseColor(s.color) }));
         const shading = this.doc.addShading(stops, [x0, y0, x1, y1]);
+        
+        this.currentPage.addShadingResource(shading.name, shading.ref);
+        this.currentPage.drawShading(shading.name);
+        return this;
+    }
+
+    radialGradient(colors: { offset: number, color: string }[], x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) {
+        if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
+        
+        const parseColor = (c: string): [number, number, number] => {
+             let hex = c.startsWith('#') ? c.slice(1) : c;
+             if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+             const r = parseInt(hex.slice(0, 2), 16) / 255;
+             const g = parseInt(hex.slice(2, 4), 16) / 255;
+             const b = parseInt(hex.slice(4, 6), 16) / 255;
+             return [r, g, b];
+        };
+
+        const stops = colors.map(s => ({ offset: s.offset, color: parseColor(s.color) }));
+        const shading = this.doc.addRadialShading(stops, [x0, y0, r0, x1, y1, r1]);
         
         this.currentPage.addShadingResource(shading.name, shading.ref);
         this.currentPage.drawShading(shading.name);

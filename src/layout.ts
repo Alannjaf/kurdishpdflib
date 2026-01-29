@@ -7,7 +7,11 @@ export interface LayoutOptions {
     flex?: number;
     align?: 'start' | 'center' | 'end' | 'space-between' | 'space-evenly';
     backgroundColor?: string;
-    backgroundGradient?: { colors: { offset: number, color: string }[], direction?: 'vertical' | 'horizontal' };
+    backgroundGradient?: { 
+        type?: 'linear' | 'radial',
+        colors: { offset: number, color: string }[], 
+        direction?: 'vertical' | 'horizontal' 
+    };
     borderColor?: string;
     borderWidth?: number;
     borderRadius?: number;
@@ -314,21 +318,37 @@ export class LayoutEngine {
                 if (this.doc.roundedRect) {
                     this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, 'N'); 
                     if (options.backgroundGradient) {
-                        const dir = options.backgroundGradient.direction || 'vertical';
-                        const coords: [number, number, number, number] = dir === 'vertical' ? [innerX, innerY, innerX, innerY - innerH] : [innerX, innerY, innerX + innerW, innerY];
-                        this.doc.gradient(options.backgroundGradient.colors, coords[0], coords[1], coords[2], coords[3]);
+                        const grad = options.backgroundGradient;
+                        if (grad.type === 'radial') {
+                            const cx = innerX + innerW / 2;
+                            const cy = innerY - innerH / 2;
+                            const r = Math.max(innerW, innerH) / 2;
+                            this.doc.radialGradient(grad.colors, cx, cy, 0, cx, cy, r);
+                        } else {
+                            const dir = grad.direction || 'vertical';
+                            const coords: [number, number, number, number] = dir === 'vertical' ? [innerX, innerY, innerX, innerY - innerH] : [innerX, innerY, innerX + innerW, innerY];
+                            this.doc.gradient(grad.colors, coords[0], coords[1], coords[2], coords[3]);
+                        }
                     } else {
                         this.doc.roundedRect(innerX, innerY - innerH, innerW, innerH, options.borderRadius, style, options.backgroundColor);
                     }
                 }
             } else {
                 if (options.backgroundGradient) {
-                    const dir = options.backgroundGradient.direction || 'vertical';
-                    const coords: [number, number, number, number] = dir === 'vertical' ? [innerX, innerY, innerX, innerY - innerH] : [innerX, innerY, innerX + innerW, innerY];
+                    const grad = options.backgroundGradient;
                     this.doc.saveGraphicsState();
                     this.doc.rect(innerX, innerY - innerH, innerW, innerH, 'N');
                     this.doc.clip();
-                    this.doc.gradient(options.backgroundGradient.colors, coords[0], coords[1], coords[2], coords[3]);
+                    if (grad.type === 'radial') {
+                        const cx = innerX + innerW / 2;
+                        const cy = innerY - innerH / 2;
+                        const r = Math.max(innerW, innerH) / 2;
+                        this.doc.radialGradient(grad.colors, cx, cy, 0, cx, cy, r);
+                    } else {
+                        const dir = grad.direction || 'vertical';
+                        const coords: [number, number, number, number] = dir === 'vertical' ? [innerX, innerY, innerX, innerY - innerH] : [innerX, innerY, innerX + innerW, innerY];
+                        this.doc.gradient(grad.colors, coords[0], coords[1], coords[2], coords[3]);
+                    }
                     this.doc.restoreGraphicsState();
                 } else {
                     this.doc.rect(innerX, innerY - innerH, innerW, innerH, style, options.backgroundColor!);

@@ -122,17 +122,7 @@ export class PdfWriter {
   }
 
   addAxialShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number]): PdfRef {
-      // 1. Create a function for the interpolation
-      // For simplicity, we'll support a simple linear interpolation between two colors for now.
-      // A more robust implementation would use a Type 3 (Stitching) function for multiple stops.
-      
-      const functionRef = this.addDict({
-          FunctionType: 2, // Exponential interpolation
-          Domain: [0, 1],
-          C0: colors[0].color,
-          C1: colors[1].color,
-          N: 1 // Linear
-      });
+      const functionRef = this.buildGradientFunction(colors);
 
       const shadingDict = {
           ShadingType: 2, // Axial
@@ -143,6 +133,63 @@ export class PdfWriter {
       };
 
       return this.addDict(shadingDict);
+  }
+
+  addRadialShading(colors: { offset: number, color: [number, number, number] }[], coords: [number, number, number, number, number, number]): PdfRef {
+      const functionRef = this.buildGradientFunction(colors);
+
+      const shadingDict = {
+          ShadingType: 3, // Radial
+          ColorSpace: name('DeviceRGB'),
+          Coords: coords, // [x0, y0, r0, x1, y1, r1]
+          Function: functionRef,
+          Extend: [true, true]
+      };
+
+      return this.addDict(shadingDict);
+  }
+
+  private buildGradientFunction(colors: { offset: number, color: [number, number, number] }[]): PdfRef {
+      // Sort colors by offset
+      const sorted = [...colors].sort((a, b) => a.offset - b.offset);
+      
+      if (sorted.length === 2) {
+          return this.addDict({
+              FunctionType: 2,
+              Domain: [0, 1],
+              C0: sorted[0].color,
+              C1: sorted[1].color,
+              N: 1
+          });
+      }
+
+      // Multiple stops: Type 3 Stitching Function
+      const functions: PdfRef[] = [];
+      const bounds: number[] = [];
+      const encode: number[] = [];
+
+      for (let i = 0; i < sorted.length - 1; i++) {
+          functions.push(this.addDict({
+              FunctionType: 2,
+              Domain: [0, 1],
+              C0: sorted[i].color,
+              C1: sorted[i+1].color,
+              N: 1
+          }));
+
+          if (i > 0) {
+              bounds.push(sorted[i].offset);
+          }
+          encode.push(0, 1);
+      }
+
+      return this.addDict({
+          FunctionType: 3,
+          Domain: [0, 1],
+          Functions: functions,
+          Bounds: bounds,
+          Encode: encode
+      });
   }
 
   addImageXObject(data: Uint8Array, type: 'jpeg' | 'png', width: number, height: number, options: { smask?: PdfRef } = {}): PdfRef {
