@@ -127,7 +127,11 @@ export class KurdPDF {
     private getBestFontForChar(char: string): string {
         if (!this.shaper) return this.defaultFont || 'F1';
         
-        for (const fontKey of this.fallbackOrder) {
+        // Always prefer the explicitly set default font if it has the glyph
+        const preferred = [this.defaultFont, ...this.fallbackOrder.filter(f => f !== this.defaultFont)];
+
+        for (const fontKey of preferred) {
+            if (!fontKey) continue;
             const sf = this.shapedFonts.get(fontKey);
             if (!sf) continue;
             // Check if glyph exists (GID > 0)

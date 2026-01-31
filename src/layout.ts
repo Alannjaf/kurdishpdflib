@@ -36,6 +36,7 @@ export type LayoutElement =
     | { type: 'link', url: string, targetPage?: number, child: LayoutElement, options?: LayoutOptions }
     | { type: 'vstack' | 'hstack' | 'zstack', children: LayoutElement[], options?: LayoutOptions }
     | { type: 'table', headers: (string | LayoutElement)[], rows: (string | LayoutElement)[][], columnWidths?: number[], options?: TableOptions }
+    | { type: 'grid', columns: number, children: LayoutElement[], options?: GridOptions }
     | { type: 'box', child: LayoutElement, options?: LayoutOptions }
     | { type: 'spacer', size: number };
 
@@ -45,6 +46,12 @@ export interface TableOptions extends LayoutOptions {
     alternateRowBackgroundColor?: string;
     rowPadding?: number;
     fontSize?: number;
+}
+
+export interface GridOptions extends LayoutOptions {
+    columns: number;
+    columnGap?: number;
+    rowGap?: number;
 }
 
 interface SideValues {
@@ -283,6 +290,31 @@ export class LayoutEngine {
             const tableEl = this.tableToLayout(el, w);
             const size = this.calculateSize(tableEl, w, false);
             h = explicitHeight || size.height;
+        } else if (el.type === 'grid') {
+            const gridOpts = (el.options || {}) as GridOptions;
+            const cols = el.columns || 1;
+            const colGap = gridOpts.columnGap || gridOpts.gap || 0;
+            const rowGap = gridOpts.rowGap || gridOpts.gap || 0;
+            const pSides = parseSides(gridOpts.padding);
+            
+            w = explicitWidth || childContextWidth;
+            const availableColWidth = (w - pSides.left - pSides.right - (cols - 1) * colGap) / cols;
+            
+            let rowHeight = 0;
+            let totalHeight = 0;
+            const rowCount = Math.ceil(el.children.length / cols);
+            
+            for (let i = 0; i < el.children.length; i++) {
+                const size = this.calculateSize(el.children[i], availableColWidth, false);
+                rowHeight = Math.max(rowHeight, size.height);
+                
+                if ((i + 1) % cols === 0 || i === el.children.length - 1) {
+                    totalHeight += rowHeight;
+                    if (i < el.children.length - 1) totalHeight += rowGap;
+                    rowHeight = 0;
+                }
+            }
+            h = explicitHeight || (totalHeight + pSides.top + pSides.bottom);
         } else if (el.type === 'box' || el.type === 'link') {
             const inner = this.calculateSize(el.child, childContextWidth, false);
             w = explicitWidth || (shrink ? inner.width : childContextWidth);
@@ -302,7 +334,7 @@ export class LayoutEngine {
     }
 
     private drawElement(el: LayoutElement, x: number, y: number, w: number, h: number, parentWidth: number) {
-        const options: LayoutOptions = (el as any).options || {};
+        const options: LayoutOptions | GridOptions = (el as any).options || {};
         const m = parseSides(options.margin);
         const p = parseSides(options.padding);
 
@@ -465,6 +497,30 @@ export class LayoutEngine {
             const tableEl = this.tableToLayout(el, w);
             const size = this.calculateSize(tableEl, w, false);
             this.drawElement(tableEl, x, y, size.width, size.height, parentWidth);
+        } else if (el.type === 'grid') {
+            const gridOpts = options as GridOptions;
+            const cols = el.columns || 1;
+            const colGap = gridOpts.columnGap || gridOpts.gap || 0;
+            const rowGap = gridOpts.rowGap || gridOpts.gap || 0;
+            const availableColWidth = (contentW - (cols - 1) * colGap) / cols;
+            
+            let currentX = contentX;
+            let currentY = contentY;
+            let maxRowHeight = 0;
+            
+            el.children.forEach((child, i) => {
+                const size = this.calculateSize(child, availableColWidth, false);
+                this.drawElement(child, currentX, currentY, availableColWidth, size.height, availableColWidth);
+                
+                maxRowHeight = Math.max(maxRowHeight, size.height);
+                currentX += availableColWidth + colGap;
+                
+                if ((i + 1) % cols === 0) {
+                    currentX = contentX;
+                    currentY -= (maxRowHeight + rowGap);
+                    maxRowHeight = 0;
+                }
+            });
         } else if (el.type === 'link') {
             const size = this.calculateSize(el.child, contentW, false);
             if (el.targetPage !== undefined) {
@@ -490,20 +546,41 @@ export class LayoutEngine {
     }
 
     private wrapText(text: string, maxWidth: number, size: number, font?: string, rtl?: boolean): string[] {
-        const words = text.split(/\s+/);
+        if (!text) return [];
+        const words = text.split(/(\s+)/); // Keep whitespace as separate tokens
         const lines: string[] = [];
         let currentLine: string[] = [];
-        for (const word of words) {
-            const testLine = [...currentLine, word].join(' ');
-            const width = this.doc.measureText(testLine, size, { font, rtl });
-            if (width > maxWidth && currentLine.length > 0) {
-                lines.push(currentLine.join(' '));
-                currentLine = [word];
+        let currentLineWidth = 0;
+
+        for (const token of words) {
+            if (token === '') continue;
+            
+            const tokenWidth = this.doc.measureText(token, size, { font, rtl });
+            
+            if (currentLineWidth + tokenWidth > maxWidth && currentLine.length > 0) {
+                // If it's just whitespace at the start of a new line, skip it
+                if (currentLine.length === 1 && currentLine[0].trim() === '') {
+                    currentLine = token.trim() === '' ? [] : [token];
+                    currentLineWidth = token.trim() === '' ? 0 : tokenWidth;
+                } else {
+                    lines.push(currentLine.join(''));
+                    if (token.trim() === '') {
+                        currentLine = [];
+                        currentLineWidth = 0;
+                    } else {
+                        currentLine = [token];
+                        currentLineWidth = tokenWidth;
+                    }
+                }
             } else {
-                currentLine.push(word);
+                currentLine.push(token);
+                currentLineWidth += tokenWidth;
             }
         }
-        if (currentLine.length > 0) lines.push(currentLine.join(' '));
+        if (currentLine.length > 0) {
+            const line = currentLine.join('');
+            if (line.trim() !== '') lines.push(line);
+        }
         return lines;
     }
 
