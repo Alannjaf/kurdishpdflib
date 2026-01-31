@@ -335,8 +335,9 @@ export class KurdPDF {
         else if (align === 'right') drawX += (availableWidth - totalWidth);
         
         const runs = this.splitIntoRuns(text);
-        // Better Line RTL detection: if ANY run is RTL, the whole line flows RTL
-        const isLineRtl = runs.some(r => r.isRtl);
+        // Determine base direction based on the first strong character
+        const firstStrongRun = runs.find(r => r.text.trim().length > 0);
+        const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
         let wordSpacing = 0;
         if (align === 'justify' && availableWidth > totalWidth) {
@@ -433,7 +434,9 @@ export class KurdPDF {
         else if (align === 'right') drawX += (availableWidth - totalWidth);
 
         const runs = this.splitIntoRuns(text);
-        const isLineRtl = runs.some(r => r.isRtl);
+        // Determine base direction based on the first strong character
+        const firstStrongRun = runs.find(r => r.text.trim().length > 0);
+        const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
         let wordSpacing = 0;
         if (align === 'justify' && availableWidth > totalWidth) {

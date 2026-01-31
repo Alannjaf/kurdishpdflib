@@ -8,7 +8,8 @@
   "scripts": {
     "build": "tsc",
     "test": "node --test test/**/*.test.js",
-    "example": "node dist/example.js"
+    "example": "node dist/example.js",
+    "debug": "node test/debug.js"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
