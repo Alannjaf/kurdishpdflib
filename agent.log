@@ -1,0 +1,69 @@
+
+Here are **3 concrete improvements** from the audit:
+
+---
+
+## 1. **Centralize color parsing and use one type**
+
+Color parsing is duplicated in several places in `kurd-pdf.ts`:
+
+- **`parseColorHex`** (lines 269–296) – hex and `cmyk(...)`
+- **Inline `parseColor` in `rect()`** (lines 352–374) – same idea, different shape
+- **Inline `parseColor` in `path()`** (lines 387–416) – again plus color names
+- **Inline `parseColor` in `gradient()` and `radialGradient()`** (lines 527–534, 547–554) – hex only
+
+So you have multiple copies of hex/CMYK logic and no single type for “resolved” color. That makes it easy for call sites to pass either a string or a tuple and for behavior to drift.
+
+**Recommendation:** Add one shared helper, e.g. `parseColor(c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined`, in a small util (or at the top of `kurd-pdf.ts`). Use it everywhere you currently parse hex/CMYK/names, and type all drawing methods to accept only that parsed tuple (or undefined), not `string | tuple`. Then you can remove `parseColorHex` and the inline `parseColor` clones.
+
+---
+
+## 2. **Fix Info dict lookup in `PdfWriter.build()`**
+
+In `pdf-writer.ts` around line 265:
+
+```265:267:src/pdf-writer.ts
+    const catalog = this.objects.find(o => o.dict?.Type && (o.dict.Type as any).__pdfName === 'Catalog');
+    const info = this.objects.find(o => o.dict?.Producer === '(kurd-pdflib)');
+    const rootId = catalog ? catalog.id : 1;
+```
+
+`Producer` is stored in memory as the string `'kurd-pdflib'` (see `document.ts` line 53). The parentheses are only added when serializing to PDF. So the condition `o.dict?.Producer === '(kurd-pdflib)'` is always false and the Info object is never found; the code falls back to `infoId = 2`, which only works as long as the Info dict is the second object.
+
+**Recommendation:** Match the in-memory value, e.g.:
+
+```ts
+const info = this.objects.find(o => o.dict?.Producer === 'kurd-pdflib');
+```
+
+(and keep a fallback to `2` if you want to be defensive). That makes the Info reference correct regardless of object order.
+
+---
+
+## 3. **Type the internal page API instead of `any`**
+
+Internal page machinery is attached and used via `any`:
+
+- **`page.ts`:** `(page as any)._finalizeInternalLinks`, `_getContent`, `_contentRef` (lines 284–301)
+- **`document.ts`:** `(p as any)._finalizeInternalLinks` (lines 173–174)
+- **`document.ts`:** `(p as any)._finalizeInternalLinks` again in `save()` (172–174)
+- **`page.ts` (finalizePageContent):** `const p = page as any` (305)
+
+So the compiler doesn’t check these internal methods and refactors are riskier.
+
+**Recommendation:** Introduce an internal interface that extends the public `Page` type, for example:
+
+```ts
+// In page.ts or a shared types file
+export interface PageInternal extends Page {
+  _finalizeInternalLinks?(pageRefs: PdfRef[]): void;
+  _getContent?(): Uint8Array;
+  _contentRef?: PdfRef;
+}
+```
+
+Use `PageInternal` for the object returned by `createPage`, and use `PageInternal` (not `Page`) in `finalizePageContent` and in `document.ts` where you call `_finalizeInternalLinks` and touch content/refs. That keeps the public API as `Page` while making the internal contract explicit and type-safe.
+
+---
+
+Summary: (1) one color parser and one color type, (2) fix Info lookup by comparing to `'kurd-pdflib'`, (3) type internal page methods with `PageInternal` instead of `any`.

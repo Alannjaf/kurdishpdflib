@@ -127,7 +127,11 @@ export class KurdPDF {
     private getBestFontForChar(char: string): string {
         if (!this.shaper) return this.defaultFont || 'F1';
         
-        for (const fontKey of this.fallbackOrder) {
+        // Always prefer the explicitly set default font if it has the glyph
+        const preferred = [this.defaultFont, ...this.fallbackOrder.filter(f => f !== this.defaultFont)];
+
+        for (const fontKey of preferred) {
+            if (!fontKey) continue;
             const sf = this.shapedFonts.get(fontKey);
             if (!sf) continue;
             // Check if glyph exists (GID > 0)
@@ -331,8 +335,9 @@ export class KurdPDF {
         else if (align === 'right') drawX += (availableWidth - totalWidth);
         
         const runs = this.splitIntoRuns(text);
-        // Better Line RTL detection: if ANY run is RTL, the whole line flows RTL
-        const isLineRtl = runs.some(r => r.isRtl);
+        // Determine base direction based on the first strong character
+        const firstStrongRun = runs.find(r => r.text.trim().length > 0);
+        const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
         let wordSpacing = 0;
         if (align === 'justify' && availableWidth > totalWidth) {
@@ -429,7 +434,9 @@ export class KurdPDF {
         else if (align === 'right') drawX += (availableWidth - totalWidth);
 
         const runs = this.splitIntoRuns(text);
-        const isLineRtl = runs.some(r => r.isRtl);
+        // Determine base direction based on the first strong character
+        const firstStrongRun = runs.find(r => r.text.trim().length > 0);
+        const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
         let wordSpacing = 0;
         if (align === 'justify' && availableWidth > totalWidth) {

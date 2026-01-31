@@ -50,10 +50,17 @@ end`;
   
   for (const [gid, unicode] of entries) {
     const gh = (gid & 0xffff).toString(16).padStart(4, '0');
-    // Encode string as hex UTF-16BE
+    // Encode string as hex UTF-16BE (handling surrogates for high codepoints)
     let hex = '';
-    for (let i = 0; i < unicode.length; i++) {
-      hex += unicode.charCodeAt(i).toString(16).padStart(4, '0');
+    for (const char of unicode) {
+      const code = char.codePointAt(0)!;
+      if (code > 0xFFFF) {
+        const high = Math.floor((code - 0x10000) / 0x400) + 0xD800;
+        const low = ((code - 0x10000) % 0x400) + 0xDC00;
+        hex += high.toString(16).padStart(4, '0') + low.toString(16).padStart(4, '0');
+      } else {
+        hex += code.toString(16).padStart(4, '0');
+      }
     }
     lines.push(`<${gh}> <${hex}>`);
   }
