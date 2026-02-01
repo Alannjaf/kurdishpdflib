@@ -13,8 +13,10 @@ async function runTest() {
         const doc = new KurdPDF({
             fonts: {
                 'AR': { fontBytes: readFileSync(path.join(projectRoot, 'assets/NotoSansArabic-Regular.ttf')), baseFontName: 'NotoSansArabic' },
-                'EN': { fontBytes: readFileSync(path.join(projectRoot, 'assets/NotoSans-Regular.ttf')), baseFontName: 'NotoSans' }
+                'EN': { fontBytes: readFileSync(path.join(projectRoot, 'assets/NotoSans-Regular.ttf')), baseFontName: 'NotoSans' },
+                'EM': { fontBytes: readFileSync(path.join(projectRoot, 'assets/NotoEmoji-Regular.ttf')), baseFontName: 'NotoEmoji' }
             },
+            fallbackOrder: ['EN', 'AR', 'EM'],
             title: 'Kurd-PDFLib Comprehensive Test',
             author: 'Astra'
         });
