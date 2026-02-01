@@ -96,11 +96,53 @@ async function runTest() {
                         { type: 'box', options: { padding: 6 }, child: { type: 'text', content: 'ئەمە دەقێکی کوردییە لە ناو grid.', options: { font: 'AR', size: 10, rtl: true } } },
                         { type: 'box', options: { padding: 6 }, child: { type: 'text', content: 'LTR English in grid.', options: { font: 'EN', size: 10 } } }
                     ]
+                },
+
+                // --- 6. Advanced Typography ---
+                { type: 'text', content: '6. Advanced Typography', options: { font: 'EN', size: 14, align: 'left' } },
+                {
+                    type: 'vstack',
+                    options: { gap: 5, padding: 10, backgroundColor: '#f0fff0', borderRadius: 4 },
+                    children: [
+                         { type: 'text', content: 'Standard Spacing', options: { font: 'EN', size: 12 } },
+                         { type: 'text', content: 'Wide Letter Spacing (5px)', options: { font: 'EN', size: 12, letterSpacing: 5 } },
+                         { type: 'text', content: 'Wide Word Spacing (10px)', options: { font: 'EN', size: 12, wordSpacing: 10 } },
+                         { type: 'text', content: 'Both Spacings (3px / 8px)', options: { font: 'EN', size: 12, letterSpacing: 3, wordSpacing: 8 } },
+                         { type: 'text', content: 'Kurdish Wide: ئەوان', options: { font: 'AR', size: 12, rtl: true, letterSpacing: 3 } }
+                    ]
+                },
+
+                // --- 7. Tables v2 ---
+                { type: 'text', content: '7. Tables v2 (Styled Header)', options: { font: 'EN', size: 14, align: 'left' } },
+                {
+                    type: 'table',
+                    headers: ['ID', 'Name', 'Role'],
+                    rows: [
+                        ['1', 'Alice', 'Admin'],
+                        ['2', 'Bob', 'User'],
+                        ['3', 'Charlie', 'Guest']
+                    ],
+                    options: {
+                        headerBackgroundColor: '#333333',
+                        headerTextColor: '#ffffff',
+                        headerFont: 'EN',
+                        headerFontSize: 12,
+                        headerAlign: 'center',
+                        alternateRowBackgroundColor: '#f2f2f2',
+                        padding: 2
+                    }
                 }
             ]
         };
 
-        layout.renderFlow(root);
+        layout.renderFlow(root, {
+            topMargin: 50,
+            bottomMargin: 50,
+            leftMargin: 50,
+            rightMargin: 50,
+            // Assuming A4 width (595), setting content width to respect right margin
+            // The logic in layout.renderFlow handles leftMargin, but we need to ensure content width is constrained
+        });
 
         const pdfBytes = await doc.save();
         const outPath = path.join(projectRoot, 'test-output.pdf');

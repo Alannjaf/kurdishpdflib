@@ -26,6 +26,8 @@ export interface TextElementOptions {
     align?: 'left' | 'right' | 'center' | 'justify';
     width?: number | string;
     lineHeight?: number;
+    letterSpacing?: number;
+    wordSpacing?: number;
 }
 
 export type LayoutElement = 
@@ -46,6 +48,9 @@ export interface TableOptions extends LayoutOptions {
     alternateRowBackgroundColor?: string;
     rowPadding?: number;
     fontSize?: number;
+    headerFont?: string;
+    headerFontSize?: number;
+    headerAlign?: 'left' | 'right' | 'center';
 }
 
 export interface GridOptions extends LayoutOptions {
@@ -90,19 +95,21 @@ export class LayoutEngine {
         topMargin?: number, 
         bottomMargin?: number, 
         leftMargin?: number,
+        rightMargin?: number,
         header?: LayoutElement | ((page: number, total: number) => LayoutElement),
         footer?: LayoutElement | ((page: number, total: number) => LayoutElement)
     } = {}) {
         const top = options.topMargin ?? 50;
         const bottom = options.bottomMargin ?? 50;
         const left = options.leftMargin ?? 0;
+        const right = options.rightMargin ?? 50;
         const pageHeight = 842;
         const pageWidth = 595;
 
         const getHeader = (page: number, total: number) => typeof options.header === 'function' ? options.header(page, total) : options.header;
         const getFooter = (page: number, total: number) => typeof options.footer === 'function' ? options.footer(page, total) : options.footer;
 
-        const contentWidth = pageWidth - left;
+        const contentWidth = pageWidth - left - right;
 
         if (element.type === 'vstack') {
             const gap = element.options?.gap || 0;
@@ -621,16 +628,25 @@ export class LayoutEngine {
             let child: LayoutElement;
             if (typeof content === 'string') {
                 const isRtl = /[\u0600-\u06FF]/.test(content);
+                
+                let font = isRtl ? 'AR' : 'EN';
+                if (isHeader && options.headerFont) font = options.headerFont;
+                
+                const size = (isHeader && options.headerFontSize) ? options.headerFontSize : fontSize;
+                
+                let align: 'left' | 'right' | 'center' | 'justify' = isRtl ? 'right' : 'left';
+                if (isHeader && options.headerAlign) align = options.headerAlign;
+
                 child = { 
                     type: 'text', 
                     content, 
                     options: { 
-                        font: isRtl ? 'AR' : 'EN', 
-                        size: fontSize, 
+                        font: font, 
+                        size: size, 
                         rtl: isRtl, 
                         color: (isHeader && options.headerTextColor) ? options.headerTextColor : undefined, 
                         width: width - (padding * 2), 
-                        align: isRtl ? 'right' : 'left' 
+                        align: align 
                     } 
                 };
             } else {

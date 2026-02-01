@@ -174,12 +174,16 @@ export class KurdPDF {
             return false; // Default (English, etc.) is LTR
         };
 
-        let currentFont = this.getBestFontForChar(text[0]);
-        let currentIsRtl = getCharDir(text[0]);
-        let currentText = text[0];
+        // Use Array.from to correctly split by code points (handles surrogate pairs)
+        const chars = Array.from(text);
+        if (chars.length === 0) return [];
 
-        for (let i = 1; i < text.length; i++) {
-            const char = text[i];
+        let currentFont = this.getBestFontForChar(chars[0]);
+        let currentIsRtl = getCharDir(chars[0]);
+        let currentText = chars[0];
+
+        for (let i = 1; i < chars.length; i++) {
+            const char = chars[i];
             const font = this.getBestFontForChar(char);
             
             // Neutrals take the direction of the current run to prevent fragmentation
@@ -201,10 +205,12 @@ export class KurdPDF {
     /**
      * Measure the width of a text string with the given font and size.
      */
-    measureText(text: string, size: number, options: { font?: string, rtl?: boolean } = {}): number {
+    measureText(text: string, size: number, options: { font?: string, rtl?: boolean, letterSpacing?: number } = {}): number {
+        const letterSpacing = options.letterSpacing || 0;
+
         if (!options.font) {
             const runs = this.splitIntoRuns(text);
-            return runs.reduce((acc, run) => acc + this.measureText(run.text, size, { font: run.font, rtl: run.isRtl }), 0);
+            return runs.reduce((acc, run) => acc + this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing }), 0);
         }
 
         const fontKey = options.font || this.defaultFont || 'F1';
@@ -220,39 +226,45 @@ export class KurdPDF {
         const scale = size / UPM;
         const shaped = this.shaper.shape(sf, text, { rtl });
         const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
-        return totalAdvance * scale;
+        
+        // Add letterSpacing for each glyph
+        const totalLS = letterSpacing * shaped.length;
+        
+        return (totalAdvance * scale) + totalLS;
     }
 
     /**
      * Add text to the current page.
      */
-    text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center' | 'justify', color?: string } = {}) {
+    text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center' | 'justify', color?: string, wordSpacing?: number, letterSpacing?: number } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
         
         const size = options.size || 12;
         const maxWidth = options.width;
         const color = this.parseColorHex(options.color);
+        const ws = options.wordSpacing || 0;
+        const ls = options.letterSpacing || 0;
 
         if (!options.font) {
             if (maxWidth && maxWidth > 0) {
-                 this.drawWrappedTextFallback(text, x, y, maxWidth, size, options.align || 'left', options.color);
+                 this.drawWrappedTextFallback(text, x, y, maxWidth, size, options.align || 'left', options.color, ws, ls);
             } else {
-                 const totalWidth = this.measureText(text, size);
+                 const totalWidth = this.measureText(text, size, { letterSpacing: ls });
                  const runs = this.splitIntoRuns(text);
                  const isLineRtl = runs.length > 0 && runs[0].isRtl;
 
                  if (isLineRtl) {
                      let currentX = x + totalWidth;
                      for (const run of runs) {
-                         const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
-                         this.drawSingleLine(run.text, currentX - runW, y, size, run.font, run.isRtl, color);
+                         const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing: ls });
+                         this.drawSingleLine(run.text, currentX - runW, y, size, run.font, run.isRtl, color, ws, ls);
                          currentX -= runW;
                      }
                  } else {
                      let currentX = x;
                      for (const run of runs) {
-                         this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color);
-                         currentX += this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                         this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color, ws, ls);
+                         currentX += this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing: ls });
                      }
                  }
             }
@@ -263,9 +275,9 @@ export class KurdPDF {
         const rtl = options.rtl ?? false;
         
         if (maxWidth && maxWidth > 0) {
-            this.drawWrappedText(text, x, y, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color);
+            this.drawWrappedText(text, x, y, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color, ws, ls);
         } else {
-            this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
+            this.drawSingleLine(text, x, y, size, fontKey, rtl, color, ws, ls);
         }
         return this;
     }
@@ -299,7 +311,7 @@ export class KurdPDF {
          return undefined;
     }
 
-    private drawWrappedTextFallback(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string) {
+    private drawWrappedTextFallback(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string, wordSpacing?: number, letterSpacing?: number) {
         const words = text.split(' ');
         let currentLine: string[] = [];
         let currentY = y;
@@ -307,10 +319,10 @@ export class KurdPDF {
 
         for (const word of words) {
             const testLine = [...currentLine, word].join(' ');
-            const width = this.measureText(testLine, size);
+            const width = this.measureText(testLine, size, { letterSpacing });
             
             if (width > maxWidth && currentLine.length > 0) {
-                this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color);
+                this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color, wordSpacing, letterSpacing);
                 currentY -= lineHeight;
                 currentLine = [word];
             } else {
@@ -318,17 +330,17 @@ export class KurdPDF {
             }
         }
         if (currentLine.length > 0) {
-            this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color);
+            this.drawRunsAligned(currentLine.join(' '), x, currentY, maxWidth, size, align, color, wordSpacing, letterSpacing);
         }
     }
 
-    private drawRunsAligned(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string) {
+    private drawRunsAligned(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string, explicitWordSpacing: number = 0, letterSpacing: number = 0) {
         // Add a tiny safety inset (1.0px) to prevent clipping artifacts at the edges
         const safetyInset = 1.0;
         const availableWidth = maxWidth - (safetyInset * 2);
         const startX = x + safetyInset;
 
-        const totalWidth = this.measureText(text, size);
+        const totalWidth = this.measureText(text, size, { letterSpacing });
         let drawX = startX;
         
         if (align === 'center') drawX += (availableWidth - totalWidth) / 2;
@@ -339,53 +351,53 @@ export class KurdPDF {
         const firstStrongRun = runs.find(r => r.text.trim().length > 0);
         const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
-        let wordSpacing = 0;
+        let wordSpacing = explicitWordSpacing;
         if (align === 'justify' && availableWidth > totalWidth) {
             const spaceCount = text.trim().split(/\s+/).length - 1;
             if (spaceCount > 0) {
-                wordSpacing = (availableWidth - totalWidth) / spaceCount;
+                wordSpacing += (availableWidth - totalWidth) / spaceCount;
             }
         }
 
         if (isLineRtl) {
             let currentX = (align === 'justify') ? (startX + availableWidth) : (drawX + totalWidth);
             for (const run of runs) {
-                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing });
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
                 
                 // Draw this segment using its own direction (run.isRtl)
                 // This ensures numbers (isRtl: false) are shaped correctly LTR
-                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing);
+                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing, letterSpacing);
                 currentX -= justifiedRunW;
             }
         } else {
             let currentX = drawX;
             for (const run of runs) {
-                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing });
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
 
-                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing);
+                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing, letterSpacing);
                 currentX += justifiedRunW;
             }
         }
     }
 
-    private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number] | [number, number, number, number], wordSpacing: number = 0) {
+    private drawSingleLine(text: string, x: number, y: number, size: number, fontKey: string, rtl: boolean, color?: [number, number, number] | [number, number, number, number], wordSpacing: number = 0, letterSpacing: number = 0) {
         const sf = this.shapedFonts.get(fontKey);
         if (sf && this.shaper) {
             const shaped = this.shaper.shape(sf, text, { rtl });
-            this.currentPage!.drawShapedRun(shaped, { x, y, size, font: fontKey, rtl, color, wordSpacing });
+            this.currentPage!.drawShapedRun(shaped, { x, y, size, font: fontKey, rtl, color, wordSpacing, letterSpacing });
         } else {
-            this.currentPage!.drawText(text, { x, y, size, font: fontKey, color });
+            this.currentPage!.drawText(text, { x, y, size, font: fontKey, color, wordSpacing, letterSpacing });
         }
     }
 
-    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number] | [number, number, number, number]) {
+    private drawWrappedText(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: 'left' | 'right' | 'center' | 'justify', color?: [number, number, number] | [number, number, number, number], wordSpacing?: number, letterSpacing?: number) {
         const sf = this.shapedFonts.get(fontKey);
         if (!sf || !this.shaper) {
-            this.drawSingleLine(text, x, y, size, fontKey, rtl, color);
+            this.drawSingleLine(text, x, y, size, fontKey, rtl, color, wordSpacing, letterSpacing);
             return;
         }
 
@@ -400,7 +412,7 @@ export class KurdPDF {
         const measure = (s: string) => {
             const shaped = this.shaper!.shape(sf, s, { rtl });
             const totalAdvance = shaped.reduce((acc, g) => acc + g.xAdvance, 0);
-            return totalAdvance * scale; 
+            return (totalAdvance * scale) + ((letterSpacing || 0) * shaped.length); 
         };
 
         for (let i=0; i < words.length; i++) {
@@ -410,7 +422,7 @@ export class KurdPDF {
             
             if (width > maxWidth && currentLine.length > 0) {
                 const lineStr = currentLine.join(' ');
-                this.drawLineAligned(lineStr, x, currentY, maxWidth, size, fontKey, rtl, align, color);
+                this.drawLineAligned(lineStr, x, currentY, maxWidth, size, fontKey, rtl, align, color, wordSpacing, letterSpacing);
                 currentY -= lineHeight;
                 currentLine = [word];
             } else {
@@ -418,12 +430,12 @@ export class KurdPDF {
             }
         }
         if (currentLine.length > 0) {
-            this.drawLineAligned(currentLine.join(' '), x, currentY, maxWidth, size, fontKey, rtl, align, color);
+            this.drawLineAligned(currentLine.join(' '), x, currentY, maxWidth, size, fontKey, rtl, align, color, wordSpacing, letterSpacing);
         }
     }
 
-    private drawLineAligned(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: string, color?: [number, number, number] | [number, number, number, number]) {
-        const totalWidth = this.measureText(text, size, { font: fontKey, rtl });
+    private drawLineAligned(text: string, x: number, y: number, maxWidth: number, size: number, fontKey: string, rtl: boolean, align: string, color?: [number, number, number] | [number, number, number, number], explicitWordSpacing: number = 0, letterSpacing: number = 0) {
+        const totalWidth = this.measureText(text, size, { font: fontKey, rtl, letterSpacing });
         
         // Safety inset matches drawRunsAligned
         const safetyInset = 1.0;
@@ -438,32 +450,32 @@ export class KurdPDF {
         const firstStrongRun = runs.find(r => r.text.trim().length > 0);
         const isLineRtl = firstStrongRun ? firstStrongRun.isRtl : false;
 
-        let wordSpacing = 0;
+        let wordSpacing = explicitWordSpacing;
         if (align === 'justify' && availableWidth > totalWidth) {
             const spaceCount = text.trim().split(/\s+/).length - 1;
             if (spaceCount > 0) {
-                wordSpacing = (availableWidth - totalWidth) / spaceCount;
+                wordSpacing += (availableWidth - totalWidth) / spaceCount;
             }
         }
 
         if (isLineRtl) {
             let currentX = (align === 'justify') ? (x + safetyInset + availableWidth) : (drawX + totalWidth);
             for (const run of runs) {
-                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing });
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
                 
-                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, color, wordSpacing);
+                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, color, wordSpacing, letterSpacing);
                 currentX -= justifiedRunW;
             }
         } else {
             let currentX = drawX;
             for (const run of runs) {
-                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl });
+                const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing });
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
 
-                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color, wordSpacing);
+                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color, wordSpacing, letterSpacing);
                 currentX += justifiedRunW;
             }
         }
