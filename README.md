@@ -7,7 +7,7 @@ A powerful, zero-dependency Node.js library for high-quality PDF generation, spe
 *   **🚀 Zero Dependency**: Built from the ground up for maximum speed and portability.
 *   **🌍 Multi-Script Support**: Full HarfBuzz-powered text shaping for perfect Kurdish ligatures and RTL layout.
 *   **🏗️ UI-Style Layout Engine**:
-    *   Responsive `vstack`, `hstack`, and `zstack` containers.
+    *   Responsive `vstack`, `hstack`, `zstack`, and `grid` containers.
     *   Flexbox-style distribution: `space-between`, `space-evenly`, and `center`.
     *   Full styling: `padding`, `margin`, `border`, `backgroundColor`, and `borderRadius`.
 *   **🖼️ Graphics Powerhouse**:

@@ -68,6 +68,10 @@ The `LayoutEngine` handles all coordinate math automatically, allowing you to fo
 *   **`vstack`**: Arranges children vertically. Supports `align` (`start`, `center`, `end`, `space-between`, `space-evenly`) and `gap`.
 *   **`hstack`**: Arranges children horizontally. Supports `align` and `gap`.
 *   **`zstack`**: Overlays children on top of each other. Perfect for background patterns or text overlays.
+*   **`grid`**: Arranges children in a fixed number of columns.
+    *   **`columns`**: Number of columns (e.g., `3`).
+    *   **`gap`**: Spacing between grid items.
+    *   **`rowGap`** / **`columnGap`**: Override general gap for specific axes.
 *   **`box`**: A wrapper for a single element. Used to apply styling (backgrounds, borders, padding) or to constrain an element's size.
 
 ### Global Styling Options (`LayoutOptions`)

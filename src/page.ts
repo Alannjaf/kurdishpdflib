@@ -9,6 +9,8 @@ import { toGlyphIdHex } from './encoding.js';
 
 export interface DrawTextOptions {
   x: number; y: number; size?: number; font?: string; color?: [number, number, number] | [number, number, number, number];
+  wordSpacing?: number;
+  letterSpacing?: number;
 }
 
 export interface ShapedGlyph {
@@ -18,6 +20,7 @@ export interface ShapedGlyph {
 export interface DrawShapedRunOptions {
   x: number; y: number; size?: number; font?: string; rtl?: boolean; color?: [number, number, number] | [number, number, number, number];
   wordSpacing?: number;
+  letterSpacing?: number;
 }
 
 export interface DrawImageOptions {
@@ -124,7 +127,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
   }
 
   function drawText(text: string, opts: DrawTextOptions): void {
-    const { x, y, size = 12, font = 'F1', color } = opts;
+    const { x, y, size = 12, font = 'F1', color, wordSpacing, letterSpacing } = opts;
     const info = fonts[font];
     push('q ');
     if (color) {
@@ -136,6 +139,9 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
             push(`${r.toFixed(3)} ${g.toFixed(3)} ${b.toFixed(3)} rg `);
         }
     }
+    if (wordSpacing) push(`${wordSpacing} Tw `);
+    if (letterSpacing) push(`${letterSpacing} Tc `);
+
     push('BT ');
     push(`/${font} ${size} Tf ${x} ${y} Td `);
     if (info && info.metrics && info.usedGidToUnicode) {
@@ -244,7 +250,7 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           push(`/${refName} sh\n`);
       },
       drawShapedRun: (shaped, opts) => {
-          const { x, y, size = 12, font = 'F1', rtl = false, color, wordSpacing = 0 } = opts;
+          const { x, y, size = 12, font = 'F1', rtl = false, color, wordSpacing = 0, letterSpacing = 0 } = opts;
           const info = fonts[font];
           if (!info || !info.metrics) return;
           const scale = size / info.metrics.unitsPerEm;
@@ -263,7 +269,9 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
           let cx = x, cy = y;
           const glyphsWithPos = shaped.map(g => {
               const tx = cx + (g.xOffset ?? 0) * scale, ty = cy + (g.yOffset ?? 0) * scale;
-              cx += scale * g.xAdvance; cy += scale * g.yAdvance;
+              // Apply letter spacing to advance
+              cx += (scale * g.xAdvance) + letterSpacing; 
+              cy += scale * g.yAdvance;
               
               // Apply word spacing if this glyph represents a space
               if (g.unicode === ' ') {
