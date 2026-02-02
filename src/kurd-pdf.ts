@@ -4,6 +4,8 @@ import { TextShaper, type Hb, type ShapedFont } from './shaper.js';
 import { writeFileSync } from 'fs';
 import { parseSVG } from './svg.js';
 import { parsePNG } from './png.js';
+import { generateQRCode, type QRCodeOptions, type QRCodeResult, type ErrorCorrectionLevel } from './qrcode.js';
+import { generateCode128, generateEAN13, type BarcodeResult } from './barcode.js';
 
 /**
  * Standard page sizes in points (1 point = 1/72 inch)
@@ -339,21 +341,62 @@ export class KurdPDF {
 
     /**
      * Add text to the current page.
+     * @param text - The text to draw
+     * @param x - X position
+     * @param y - Y position (baseline)
+     * @param options - Text styling options
      */
-    text(text: string, x: number, y: number, options: { font?: string, size?: number, rtl?: boolean, width?: number, align?: 'left' | 'right' | 'center' | 'justify', color?: string, wordSpacing?: number, letterSpacing?: number } = {}) {
+    text(text: string, x: number, y: number, options: {
+        font?: string,
+        size?: number,
+        rtl?: boolean,
+        width?: number,
+        align?: 'left' | 'right' | 'center' | 'justify',
+        color?: string,
+        wordSpacing?: number,
+        letterSpacing?: number,
+        /** Draw underline below text */
+        underline?: boolean,
+        /** Draw line through text */
+        strikethrough?: boolean,
+        /** Render as subscript (smaller, below baseline) */
+        subscript?: boolean,
+        /** Render as superscript (smaller, above baseline) */
+        superscript?: boolean,
+        /** Color for underline/strikethrough (defaults to text color) */
+        lineColor?: string
+    } = {}) {
         if (!this.currentPage) throw new Error("No page exists.");
-        
-        const size = options.size || 12;
+
+        // Handle subscript/superscript: adjust size and position
+        let actualSize = options.size || 12;
+        let actualY = y;
+        if (options.subscript) {
+            actualSize = actualSize * 0.65;  // 65% of original size
+            actualY = y - actualSize * 0.3;  // Move down
+        } else if (options.superscript) {
+            actualSize = actualSize * 0.65;  // 65% of original size
+            actualY = y + (options.size || 12) * 0.4;  // Move up
+        }
+
+        const size = actualSize;
         const maxWidth = options.width;
         const color = this.parseColor(options.color);
         const ws = options.wordSpacing || 0;
         const ls = options.letterSpacing || 0;
 
+        // Calculate text width for underline/strikethrough
+        let textWidth = 0;
+        if (options.underline || options.strikethrough) {
+            textWidth = this.measureText(text, size, { font: options.font, letterSpacing: ls });
+        }
+
         if (!options.font) {
             if (maxWidth && maxWidth > 0) {
-                 this.drawWrappedTextFallback(text, x, y, maxWidth, size, options.align || 'left', options.color, ws, ls);
+                 this.drawWrappedTextFallback(text, x, actualY, maxWidth, size, options.align || 'left', options.color, ws, ls);
             } else {
                  const totalWidth = this.measureText(text, size, { letterSpacing: ls });
+                 textWidth = totalWidth;
                  const runs = this.splitIntoRuns(text);
                  const isLineRtl = runs.length > 0 && runs[0].isRtl;
 
@@ -361,28 +404,51 @@ export class KurdPDF {
                      let currentX = x + totalWidth;
                      for (const run of runs) {
                          const runW = this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing: ls });
-                         this.drawSingleLine(run.text, currentX - runW, y, size, run.font, run.isRtl, color, ws, ls);
+                         this.drawSingleLine(run.text, currentX - runW, actualY, size, run.font, run.isRtl, color, ws, ls);
                          currentX -= runW;
                      }
                  } else {
                      let currentX = x;
                      for (const run of runs) {
-                         this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, color, ws, ls);
+                         this.drawSingleLine(run.text, currentX, actualY, size, run.font, run.isRtl, color, ws, ls);
                          currentX += this.measureText(run.text, size, { font: run.font, rtl: run.isRtl, letterSpacing: ls });
                      }
                  }
             }
-            return this;
+        } else {
+            const fontKey = options.font;
+            const rtl = options.rtl ?? false;
+
+            if (maxWidth && maxWidth > 0) {
+                this.drawWrappedText(text, x, actualY, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color, ws, ls);
+            } else {
+                textWidth = this.measureText(text, size, { font: fontKey, rtl, letterSpacing: ls });
+                this.drawSingleLine(text, x, actualY, size, fontKey, rtl, color, ws, ls);
+            }
         }
 
-        const fontKey = options.font;
-        const rtl = options.rtl ?? false;
-        
-        if (maxWidth && maxWidth > 0) {
-            this.drawWrappedText(text, x, y, maxWidth, size, fontKey, rtl, options.align || (rtl ? 'right' : 'left'), color, ws, ls);
-        } else {
-            this.drawSingleLine(text, x, y, size, fontKey, rtl, color, ws, ls);
+        // Draw underline
+        if (options.underline && textWidth > 0) {
+            const lineColor = this.parseColor(options.lineColor || options.color) || [0, 0, 0];
+            const lineY = actualY - size * 0.15;  // Slightly below baseline
+            const lineThickness = Math.max(0.5, size * 0.05);
+            this.currentPage.drawRect({
+                x, y: lineY, width: textWidth, height: lineThickness,
+                color: lineColor as [number, number, number], fill: true, stroke: false
+            });
         }
+
+        // Draw strikethrough
+        if (options.strikethrough && textWidth > 0) {
+            const lineColor = this.parseColor(options.lineColor || options.color) || [0, 0, 0];
+            const lineY = actualY + size * 0.3;  // Middle of text
+            const lineThickness = Math.max(0.5, size * 0.05);
+            this.currentPage.drawRect({
+                x, y: lineY, width: textWidth, height: lineThickness,
+                color: lineColor as [number, number, number], fill: true, stroke: false
+            });
+        }
+
         return this;
     }
 
@@ -928,6 +994,236 @@ export class KurdPDF {
         const gs = this.doc.getOpacityGState(opacity);
         this.currentPage.addExtGStateResource(gs.name, gs.ref);
         this.currentPage.setOpacity(gs.name);
+        return this;
+    }
+
+    /**
+     * Draw a QR code on the current page.
+     * @param text - The text/URL to encode
+     * @param x - X position (left edge)
+     * @param y - Y position (bottom edge)
+     * @param size - Size of the QR code in points
+     * @param options - QR code options
+     * @example
+     * pdf.qrCode('https://example.com', 100, 500, 100);
+     * pdf.qrCode('Hello World', 50, 400, 80, { errorCorrection: 'H', color: '#333333' });
+     */
+    qrCode(text: string, x: number, y: number, size: number, options: {
+        /** Error correction level: L (7%), M (15%), Q (25%), H (30%) */
+        errorCorrection?: ErrorCorrectionLevel;
+        /** Module color (default: black) */
+        color?: string;
+        /** Background color (default: white, use 'transparent' for none) */
+        backgroundColor?: string;
+    } = {}) {
+        if (!this.currentPage) throw new Error("No page exists.");
+
+        const qr = generateQRCode(text, { errorCorrection: options.errorCorrection || 'M' });
+        const moduleSize = size / qr.size;
+        const color = this.parseColor(options.color) || [0, 0, 0];
+        const bgColor = options.backgroundColor === 'transparent' ? null : (this.parseColor(options.backgroundColor) || [1, 1, 1]);
+
+        // Draw background
+        if (bgColor) {
+            this.currentPage.drawRect({
+                x, y, width: size, height: size,
+                fill: true, stroke: false,
+                color: bgColor as [number, number, number]
+            });
+        }
+
+        // Draw QR modules (black squares)
+        for (let row = 0; row < qr.size; row++) {
+            for (let col = 0; col < qr.size; col++) {
+                if (qr.matrix[row][col]) {
+                    const moduleX = x + col * moduleSize;
+                    // PDF y-axis is from bottom, QR matrix row 0 is at top
+                    const moduleY = y + size - (row + 1) * moduleSize;
+                    this.currentPage.drawRect({
+                        x: moduleX, y: moduleY,
+                        width: moduleSize, height: moduleSize,
+                        fill: true, stroke: false,
+                        color: color as [number, number, number]
+                    });
+                }
+            }
+        }
+
+        return this;
+    }
+
+    /**
+     * Draw a Code128 barcode on the current page.
+     * @param text - The text to encode (supports ASCII characters)
+     * @param x - X position (left edge)
+     * @param y - Y position (bottom edge)
+     * @param options - Barcode display options
+     * @example
+     * pdf.barcode('ABC-12345', 100, 500);
+     * pdf.barcode('12345678', 50, 400, { width: 200, height: 50 });
+     */
+    barcode(text: string, x: number, y: number, options: {
+        /** Total width in points (default: auto based on content) */
+        width?: number;
+        /** Height in points (default: 50) */
+        height?: number;
+        /** Bar color (default: black) */
+        color?: string;
+        /** Background color (default: white, use 'transparent' for none) */
+        backgroundColor?: string;
+        /** Show text below barcode (default: true) */
+        showText?: boolean;
+        /** Font for text label */
+        font?: string;
+        /** Font size for text label (default: 10) */
+        fontSize?: number;
+    } = {}) {
+        if (!this.currentPage) throw new Error("No page exists.");
+
+        const bc = generateCode128(text);
+        const height = options.height || 50;
+        const color = this.parseColor(options.color) || [0, 0, 0];
+        const bgColor = options.backgroundColor === 'transparent' ? null : (this.parseColor(options.backgroundColor) || [1, 1, 1]);
+        const showText = options.showText !== false;
+        const fontSize = options.fontSize || 10;
+
+        // Calculate module width
+        const totalModules = bc.width;
+        const targetWidth = options.width || totalModules * 1.5; // default ~1.5 points per module
+        const moduleWidth = targetWidth / totalModules;
+
+        // Draw background
+        const totalHeight = showText ? height + fontSize + 4 : height;
+        if (bgColor) {
+            this.currentPage.drawRect({
+                x, y, width: targetWidth, height: totalHeight,
+                fill: true, stroke: false,
+                color: bgColor as [number, number, number]
+            });
+        }
+
+        // Draw bars
+        let currentX = x;
+        let isBlack = true; // Code128 starts with a black bar
+
+        for (const barWidth of bc.bars) {
+            if (isBlack) {
+                this.currentPage.drawRect({
+                    x: currentX,
+                    y: showText ? y + fontSize + 4 : y,
+                    width: barWidth * moduleWidth,
+                    height: height,
+                    fill: true, stroke: false,
+                    color: color as [number, number, number]
+                });
+            }
+            currentX += barWidth * moduleWidth;
+            isBlack = !isBlack;
+        }
+
+        // Draw text label
+        if (showText) {
+            const textWidth = this.measureText(text, fontSize, { font: options.font });
+            const textX = x + (targetWidth - textWidth) / 2;
+            this.text(text, textX, y + 2, {
+                font: options.font,
+                size: fontSize,
+                color: options.color
+            });
+        }
+
+        return this;
+    }
+
+    /**
+     * Draw an EAN-13 barcode on the current page.
+     * @param digits - 12 or 13 digit number (check digit auto-calculated if 12)
+     * @param x - X position (left edge)
+     * @param y - Y position (bottom edge)
+     * @param options - Barcode display options
+     * @example
+     * pdf.ean13('5901234123457', 100, 500);
+     * pdf.ean13('590123412345', 50, 400, { width: 150, height: 60 });
+     */
+    ean13(digits: string, x: number, y: number, options: {
+        /** Total width in points (default: 143 - standard width) */
+        width?: number;
+        /** Height in points (default: 70) */
+        height?: number;
+        /** Bar color (default: black) */
+        color?: string;
+        /** Background color (default: white, use 'transparent' for none) */
+        backgroundColor?: string;
+        /** Show digits below barcode (default: true) */
+        showText?: boolean;
+        /** Font for text label */
+        font?: string;
+        /** Font size for text label (default: 10) */
+        fontSize?: number;
+    } = {}) {
+        if (!this.currentPage) throw new Error("No page exists.");
+
+        const bc = generateEAN13(digits);
+        const height = options.height || 70;
+        const color = this.parseColor(options.color) || [0, 0, 0];
+        const bgColor = options.backgroundColor === 'transparent' ? null : (this.parseColor(options.backgroundColor) || [1, 1, 1]);
+        const showText = options.showText !== false;
+        const fontSize = options.fontSize || 10;
+
+        // EAN-13 has 95 modules total width
+        const targetWidth = options.width || 143; // Standard EAN-13 width at 1.5x
+        const moduleWidth = targetWidth / 95;
+
+        // Draw background
+        const totalHeight = showText ? height + fontSize + 4 : height;
+        if (bgColor) {
+            this.currentPage.drawRect({
+                x, y, width: targetWidth, height: totalHeight,
+                fill: true, stroke: false,
+                color: bgColor as [number, number, number]
+            });
+        }
+
+        // Draw bars
+        let currentX = x;
+        let isBlack = true; // EAN-13 starts with a black bar (start guard)
+
+        for (const barWidth of bc.bars) {
+            if (isBlack) {
+                this.currentPage.drawRect({
+                    x: currentX,
+                    y: showText ? y + fontSize + 4 : y,
+                    width: barWidth * moduleWidth,
+                    height: height,
+                    fill: true, stroke: false,
+                    color: color as [number, number, number]
+                });
+            }
+            currentX += barWidth * moduleWidth;
+            isBlack = !isBlack;
+        }
+
+        // Draw text label (EAN-13 format: first digit outside, then groups of 6)
+        if (showText) {
+            const fullDigits = bc.text;
+            // First digit (slightly to the left of barcode)
+            this.text(fullDigits[0], x - fontSize * 0.8, y + 2, {
+                font: options.font, size: fontSize, color: options.color
+            });
+            // Left group (digits 2-7)
+            const leftGroup = fullDigits.slice(1, 7);
+            const leftX = x + 11 * moduleWidth;
+            this.text(leftGroup, leftX, y + 2, {
+                font: options.font, size: fontSize, color: options.color, letterSpacing: moduleWidth * 1.2
+            });
+            // Right group (digits 8-13)
+            const rightGroup = fullDigits.slice(7, 13);
+            const rightX = x + 50 * moduleWidth;
+            this.text(rightGroup, rightX, y + 2, {
+                font: options.font, size: fontSize, color: options.color, letterSpacing: moduleWidth * 1.2
+            });
+        }
+
         return this;
     }
 
