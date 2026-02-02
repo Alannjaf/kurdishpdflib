@@ -61,6 +61,18 @@ export class KurdPDF {
     private defaultFont: string | null = null;
     private fallbackOrder: string[] = [];
     private options: KurdPDFOptions;
+    private _pageCount: number = 0;
+    private _currentPageNumber: number = 0;
+
+    /** Get the total number of pages in the document */
+    get pageCount(): number {
+        return this._pageCount;
+    }
+
+    /** Get the current page number (1-indexed) */
+    get currentPageNumber(): number {
+        return this._currentPageNumber;
+    }
 
     constructor(options: KurdPDFOptions = {}) {
         this.options = options;
@@ -188,7 +200,24 @@ export class KurdPDF {
         }
 
         this.currentPage = this.doc.addPage(width, height);
+        this._pageCount++;
+        this._currentPageNumber = this._pageCount;
         return this.currentPage;
+    }
+
+    /**
+     * Replace page number placeholders in text.
+     * Placeholders: {pageNum}, {totalPages}, {page}/{total}
+     * Note: {totalPages} and {total} are only accurate after all pages are added.
+     */
+    formatPageText(text: string, pageNum?: number, totalPages?: number): string {
+        const pn = pageNum ?? this._currentPageNumber;
+        const tp = totalPages ?? this._pageCount;
+        return text
+            .replace(/\{pageNum\}/g, String(pn))
+            .replace(/\{totalPages\}/g, String(tp))
+            .replace(/\{page\}/g, String(pn))
+            .replace(/\{total\}/g, String(tp));
     }
 
     setFont(fontName: string) {
@@ -905,11 +934,58 @@ export class KurdPDF {
     save(filename?: string): Uint8Array {
         if (!this.doc) throw new Error("Document not initialized.");
         const buffer = this.doc.save();
-        
+
         if (filename && typeof process !== 'undefined' && process.versions && process.versions.node) {
             writeFileSync(filename, buffer);
         }
-        
+
         return buffer;
     }
+}
+
+/**
+ * Helper interface for header/footer text options
+ */
+export interface HeaderFooterOptions {
+    text: string;
+    font?: string;
+    size?: number;
+    color?: string;
+    align?: 'left' | 'center' | 'right';
+}
+
+/**
+ * Create a simple text-based header/footer element for use with LayoutEngine.renderFlow()
+ * Supports placeholders: {pageNum}, {totalPages}, {page}, {total}
+ *
+ * @example
+ * layout.renderFlow(content, {
+ *     footer: createPageFooter({ text: 'Page {pageNum} of {totalPages}', align: 'center' })
+ * });
+ */
+export function createPageFooter(options: HeaderFooterOptions): (page: number, total: number) => any {
+    const { text, font = 'F1', size = 10, color = '#666666', align = 'center' } = options;
+
+    return (page: number, total: number) => ({
+        type: 'text',
+        content: text
+            .replace(/\{pageNum\}/g, String(page))
+            .replace(/\{totalPages\}/g, String(total))
+            .replace(/\{page\}/g, String(page))
+            .replace(/\{total\}/g, String(total)),
+        options: { font, size, color, align }
+    });
+}
+
+/**
+ * Create a simple text-based header element for use with LayoutEngine.renderFlow()
+ * Supports placeholders: {pageNum}, {totalPages}, {page}, {total}
+ *
+ * @example
+ * layout.renderFlow(content, {
+ *     header: createPageHeader({ text: 'My Document - Page {pageNum}', align: 'right' })
+ * });
+ */
+export function createPageHeader(options: HeaderFooterOptions): (page: number, total: number) => any {
+    return createPageFooter(options); // Same implementation, different name for clarity
 }
