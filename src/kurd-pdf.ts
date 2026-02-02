@@ -5,6 +5,41 @@ import { writeFileSync } from 'fs';
 import { parseSVG } from './svg.js';
 import { parsePNG } from './png.js';
 
+/**
+ * Standard page sizes in points (1 point = 1/72 inch)
+ */
+export const PageSizes = {
+    // ISO 216 A-series
+    A3: { width: 842, height: 1191 },
+    A4: { width: 595, height: 842 },
+    A5: { width: 420, height: 595 },
+    A6: { width: 298, height: 420 },
+
+    // US sizes
+    Letter: { width: 612, height: 792 },
+    Legal: { width: 612, height: 1008 },
+    Tabloid: { width: 792, height: 1224 },
+    Ledger: { width: 1224, height: 792 },
+
+    // Other common sizes
+    Executive: { width: 522, height: 756 },
+    B5: { width: 499, height: 709 },
+} as const;
+
+export type PageSizeName = keyof typeof PageSizes;
+export type Orientation = 'portrait' | 'landscape';
+
+export interface PageOptions {
+    /** Named page size (e.g., 'A4', 'Letter') */
+    size?: PageSizeName;
+    /** Custom width in points (overrides size) */
+    width?: number;
+    /** Custom height in points (overrides size) */
+    height?: number;
+    /** Page orientation - swaps width/height if 'landscape' */
+    orientation?: Orientation;
+}
+
 export interface KurdPDFOptions {
     fonts?: Record<string, { fontBytes: Uint8Array, baseFontName: string }>;
     fallbackOrder?: string[];
@@ -63,7 +98,7 @@ export class KurdPDF {
         
         // Start with one page automatically
         if (initialPage) {
-            this.addPage(initialPage.width, initialPage.height);
+            this.addPage({ width: initialPage.width, height: initialPage.height });
         } else {
             this.addPage(); // Default A4
         }
@@ -115,8 +150,43 @@ export class KurdPDF {
         return this;
     }
 
-    addPage(width = 595, height = 842) {
+    /**
+     * Add a new page to the document.
+     * @param options - Page size options (named size, custom dimensions, orientation)
+     * @example
+     * // Using named size
+     * pdf.addPage({ size: 'Letter' });
+     * pdf.addPage({ size: 'A4', orientation: 'landscape' });
+     *
+     * // Using custom dimensions (in points, 1 inch = 72 points)
+     * pdf.addPage({ width: 400, height: 600 });
+     *
+     * // Default is A4 portrait
+     * pdf.addPage();
+     */
+    addPage(options: PageOptions = {}) {
         if (!this.doc) throw new Error("Document not initialized. Call await doc.init()");
+
+        let width: number;
+        let height: number;
+
+        if (options.width !== undefined && options.height !== undefined) {
+            // Custom dimensions take priority
+            width = options.width;
+            height = options.height;
+        } else {
+            // Use named size or default to A4
+            const sizeName = options.size || 'A4';
+            const size = PageSizes[sizeName];
+            width = size.width;
+            height = size.height;
+        }
+
+        // Apply orientation (swap dimensions for landscape)
+        if (options.orientation === 'landscape') {
+            [width, height] = [height, width];
+        }
+
         this.currentPage = this.doc.addPage(width, height);
         return this.currentPage;
     }
