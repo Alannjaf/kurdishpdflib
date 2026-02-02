@@ -246,7 +246,7 @@ export class KurdPDF {
         
         const size = options.size || 12;
         const maxWidth = options.width;
-        const color = this.parseColorHex(options.color);
+        const color = this.parseColor(options.color);
         const ws = options.wordSpacing || 0;
         const ls = options.letterSpacing || 0;
 
@@ -287,33 +287,46 @@ export class KurdPDF {
         return this;
     }
 
-    private parseColorHex(c?: string): [number, number, number] | [number, number, number, number] | undefined {
-         if (!c) return undefined;
-         if (c.startsWith('#')) {
-             let hex = c.slice(1);
-             if (hex.length === 3) {
-                 hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-             }
-             if (hex.length === 6) {
-                 const r = parseInt(hex.slice(0, 2), 16) / 255;
-                 const g = parseInt(hex.slice(2, 4), 16) / 255;
-                 const b = parseInt(hex.slice(4, 6), 16) / 255;
-                 return [r, g, b];
-             }
-         }
-         if (c.startsWith('cmyk(')) {
-             // cmyk(100%, 0%, 50%, 10%)
-             const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
-             if (parts) {
-                 return [
-                     parseFloat(parts[1]) / 100,
-                     parseFloat(parts[2]) / 100,
-                     parseFloat(parts[3]) / 100,
-                     parseFloat(parts[4]) / 100
-                 ];
-             }
-         }
-         return undefined;
+    /**
+     * Parse color from various formats: hex (#FFF, #FFFFFF), cmyk(), named colors, or RGB/CMYK arrays.
+     * Returns RGB [r, g, b] or CMYK [c, m, y, k] tuple, or undefined if invalid.
+     */
+    private parseColor(c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined {
+        if (!c) return undefined;
+        if (Array.isArray(c)) return c;
+
+        // Handle named colors
+        const namedColors: Record<string, string> = {
+            'red': '#ff0000', 'green': '#00ff00', 'blue': '#0000ff',
+            'black': '#000000', 'white': '#ffffff', 'gold': '#ffd700'
+        };
+        const target = namedColors[c.toLowerCase()] || c;
+
+        if (target.startsWith('#')) {
+            let hex = target.slice(1);
+            if (hex.length === 3) {
+                hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+            }
+            if (hex.length === 6) {
+                const r = parseInt(hex.slice(0, 2), 16) / 255;
+                const g = parseInt(hex.slice(2, 4), 16) / 255;
+                const b = parseInt(hex.slice(4, 6), 16) / 255;
+                return [r, g, b];
+            }
+        }
+        if (c.startsWith('cmyk(')) {
+            // cmyk(100%, 0%, 50%, 10%)
+            const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
+            if (parts) {
+                return [
+                    parseFloat(parts[1]) / 100,
+                    parseFloat(parts[2]) / 100,
+                    parseFloat(parts[3]) / 100,
+                    parseFloat(parts[4]) / 100
+                ];
+            }
+        }
+        return undefined;
     }
 
     private drawWrappedTextFallback(text: string, x: number, y: number, maxWidth: number, size: number, align: string, color?: string, wordSpacing?: number, letterSpacing?: number) {
@@ -373,7 +386,7 @@ export class KurdPDF {
                 
                 // Draw this segment using its own direction (run.isRtl)
                 // This ensures numbers (isRtl: false) are shaped correctly LTR
-                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing, letterSpacing);
+                this.drawSingleLine(run.text, currentX - justifiedRunW, y, size, run.font, run.isRtl, this.parseColor(color), wordSpacing, letterSpacing);
                 currentX -= justifiedRunW;
             }
         } else {
@@ -383,7 +396,7 @@ export class KurdPDF {
                 const numSpaces = run.text.split(' ').length - 1;
                 const justifiedRunW = runW + (numSpaces * wordSpacing);
 
-                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, this.parseColorHex(color), wordSpacing, letterSpacing);
+                this.drawSingleLine(run.text, currentX, y, size, run.font, run.isRtl, this.parseColor(color), wordSpacing, letterSpacing);
                 currentX += justifiedRunW;
             }
         }
@@ -488,31 +501,8 @@ export class KurdPDF {
 
     rect(x: number, y: number, w: number, h: number, style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
         if (!this.currentPage) throw new Error("No page exists.");
-        
-        const parseColor = (c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined => {
-             if (!c) return undefined;
-             if (Array.isArray(c)) return c;
-             if (c.startsWith('#')) {
-                 const r = parseInt(c.slice(1, 3), 16) / 255;
-                 const g = parseInt(c.slice(3, 5), 16) / 255;
-                 const b = parseInt(c.slice(5, 7), 16) / 255;
-                 return [r, g, b];
-             }
-             if (c.startsWith('cmyk(')) {
-                 const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
-                 if (parts) {
-                     return [
-                         parseFloat(parts[1]) / 100,
-                         parseFloat(parts[2]) / 100,
-                         parseFloat(parts[3]) / 100,
-                         parseFloat(parts[4]) / 100
-                     ];
-                 }
-             }
-             return undefined;
-        };
-        
-        const rgb = parseColor(color);
+
+        const rgb = this.parseColor(color);
 
         if (style === 'N') {
             this.currentPage.drawRect({ x, y, width: w, height: h, fill: false, stroke: false });
@@ -531,42 +521,9 @@ export class KurdPDF {
     }
 
     path(points: { x: number; y: number; type: 'M' | 'L' | 'C'; cp1?: {x:number, y:number}; cp2?: {x:number, y:number} }[], style: 'F' | 'S' | 'FD' | 'N' = 'S', color?: string, lineWidth?: number) {
-         if (!this.currentPage) throw new Error("No page exists.");
+        if (!this.currentPage) throw new Error("No page exists.");
 
-         const parseColor = (c?: string | [number, number, number] | [number, number, number, number]): [number, number, number] | [number, number, number, number] | undefined => {
-             if (!c) return undefined;
-             if (Array.isArray(c)) return c;
-             
-             // Handle basic names
-             const names: Record<string, string> = { 
-                'red': '#ff0000', 'green': '#00ff00', 'blue': '#0000ff', 
-                'black': '#000000', 'white': '#ffffff', 'gold': '#ffd700' 
-             };
-             const target = names[c.toLowerCase()] || c;
-
-             if (target.startsWith('#')) {
-                 let hex = target.slice(1);
-                 if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-                 const r = parseInt(hex.slice(0, 2), 16) / 255;
-                 const g = parseInt(hex.slice(2, 4), 16) / 255;
-                 const b = parseInt(hex.slice(4, 6), 16) / 255;
-                 return [r, g, b];
-             }
-             if (c.startsWith('cmyk(')) {
-                 const parts = c.match(/cmyk\(\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?,\s*([\d\.]+)%?\s*\)/);
-                 if (parts) {
-                     return [
-                         parseFloat(parts[1]) / 100,
-                         parseFloat(parts[2]) / 100,
-                         parseFloat(parts[3]) / 100,
-                         parseFloat(parts[4]) / 100
-                     ];
-                 }
-             }
-             return undefined;
-        };
-        
-        const rgb = parseColor(color);
+        const rgb = this.parseColor(color);
 
         if (style === 'N') {
              this.currentPage.drawPath({ points, close: true, clip: true }); 
@@ -847,17 +804,8 @@ export class KurdPDF {
 
     gradient(colors: { offset: number, color: string }[], x0: number, y0: number, x1: number, y1: number) {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
-        
-        const parseColor = (c: string): [number, number, number] => {
-             let hex = c.startsWith('#') ? c.slice(1) : c;
-             if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-             const r = parseInt(hex.slice(0, 2), 16) / 255;
-             const g = parseInt(hex.slice(2, 4), 16) / 255;
-             const b = parseInt(hex.slice(4, 6), 16) / 255;
-             return [r, g, b];
-        };
 
-        const stops = colors.map(s => ({ offset: s.offset, color: parseColor(s.color) }));
+        const stops = colors.map(s => ({ offset: s.offset, color: (this.parseColor(s.color) || [0, 0, 0]) as [number, number, number] }));
         const shading = this.doc.addShading(stops, [x0, y0, x1, y1]);
         
         this.currentPage.addShadingResource(shading.name, shading.ref);
@@ -867,17 +815,8 @@ export class KurdPDF {
 
     radialGradient(colors: { offset: number, color: string }[], x0: number, y0: number, r0: number, x1: number, y1: number, r1: number) {
         if (!this.doc || !this.currentPage) throw new Error("Document not initialized.");
-        
-        const parseColor = (c: string): [number, number, number] => {
-             let hex = c.startsWith('#') ? c.slice(1) : c;
-             if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-             const r = parseInt(hex.slice(0, 2), 16) / 255;
-             const g = parseInt(hex.slice(2, 4), 16) / 255;
-             const b = parseInt(hex.slice(4, 6), 16) / 255;
-             return [r, g, b];
-        };
 
-        const stops = colors.map(s => ({ offset: s.offset, color: parseColor(s.color) }));
+        const stops = colors.map(s => ({ offset: s.offset, color: (this.parseColor(s.color) || [0, 0, 0]) as [number, number, number] }));
         const shading = this.doc.addRadialShading(stops, [x0, y0, r0, x1, y1, r1]);
         
         this.currentPage.addShadingResource(shading.name, shading.ref);
