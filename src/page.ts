@@ -56,6 +56,13 @@ export interface Page {
   addShadingResource(name: string, ref: PdfRef): void;
 }
 
+/** Internal page interface with methods used by the document system */
+export interface PageInternal extends Page {
+  _finalizeInternalLinks(pageRefs: PdfRef[]): void;
+  _getContent(): Uint8Array;
+  _contentRef: PdfRef;
+}
+
 export interface FontInfo { fontRef: PdfRef; metrics?: FontMetrics; usedGidToUnicode?: [number, string][]; }
 
 export interface CreatePageOptions { fonts?: Record<string, FontInfo>; images?: Record<string, PdfRef>; extGStates?: Record<string, PdfRef>; shading?: Record<string, PdfRef>; }
@@ -63,7 +70,7 @@ export interface CreatePageOptions { fonts?: Record<string, FontInfo>; images?: 
 const encoder = new TextEncoder();
 function encodeStr(s: string): Uint8Array { return encoder.encode(s); }
 
-export function createPage(width: number, height: number, w: PdfWriter, pagesRef: PdfRef, pageRefs: PdfRef[], options: CreatePageOptions = {}): Page {
+export function createPage(width: number, height: number, w: PdfWriter, pagesRef: PdfRef, pageRefs: PdfRef[], options: CreatePageOptions = {}): PageInternal {
   const { fonts = {}, images = {}, extGStates = {}, shading = {} } = options;
   const contentChunks: Uint8Array[] = [];
   const push = (s: string) => contentChunks.push(encodeStr(s));
@@ -289,30 +296,34 @@ export function createPage(width: number, height: number, w: PdfWriter, pagesRef
       }
   };
 
-  (page as any)._finalizeInternalLinks = (pRefs: PdfRef[]) => {
-      for (const link of internalLinks) {
-          const obj = w.refsMap.get(link.annotRef.id);
-          if (obj && obj.dict && pRefs[link.targetIdx]) {
-              obj.dict.Dest = [pRefs[link.targetIdx], name('Fit')];
+  const pageInternal: PageInternal = {
+      ...page,
+      _finalizeInternalLinks: (pRefs: PdfRef[]) => {
+          for (const link of internalLinks) {
+              const obj = w.refsMap.get(link.annotRef.id);
+              if (obj && obj.dict && pRefs[link.targetIdx]) {
+                  obj.dict.Dest = [pRefs[link.targetIdx], name('Fit')];
+              }
           }
-      }
+      },
+      _getContent: () => {
+          const total = contentChunks.reduce((acc, c) => acc + c.length, 0);
+          const out = new Uint8Array(total);
+          let pos = 0;
+          for (const c of contentChunks) { out.set(c, pos); pos += c.length; }
+          return out;
+      },
+      _contentRef: contentsRef
   };
 
-  (page as any)._getContent = () => {
-    const total = contentChunks.reduce((acc, c) => acc + c.length, 0);
-    const out = new Uint8Array(total);
-    let pos = 0;
-    for (const c of contentChunks) { out.set(c, pos); pos += c.length; }
-    return out;
-  };
-  (page as any)._contentRef = contentsRef;
-  return page;
+  return pageInternal;
 }
 
 import { deflate } from 'pako';
 
-export function finalizePageContent(page: Page, w: PdfWriter): void {
-  const p = page as any;
+export function finalizePageContent(page: Page | PageInternal, w: PdfWriter): void {
+  // Check if page has internal methods
+  const p = page as PageInternal;
   if (!p._getContent || !p._contentRef) return;
   const body = p._getContent();
   const obj = w.refsMap.get(p._contentRef.id);

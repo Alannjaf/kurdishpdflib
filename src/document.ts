@@ -5,7 +5,7 @@
 
 import type { PdfRef } from './pdf-writer.js';
 import { PdfWriter, name } from './pdf-writer.js';
-import { createPage, finalizePageContent, type Page, type FontInfo } from './page.js';
+import { createPage, finalizePageContent, type Page, type PageInternal, type FontInfo } from './page.js';
 import { embedFont, type EmbeddedFont } from './ttf/embed.js';
 import { buildToUnicodeCMapFromGidPairs, encodeToUnicodeStream } from './encoding.js';
 import { parsePNG } from './png.js';
@@ -90,7 +90,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
 
   const outlines: { title: string, pageIdx: number }[] = [];
 
-  const pages: Page[] = [];
+  const pages: PageInternal[] = [];
   const embeddedFonts: Record<string, EmbeddedFont & { usedGidToUnicode: [number, string][] }> = {};
   const embeddedImages: Record<string, PdfRef> = {};
   const extGStates: Record<string, PdfRef> = {};
@@ -190,9 +190,7 @@ export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
     save(): Uint8Array {
       for (const p of pages) {
           finalizePageContent(p, w);
-          if ((p as any)._finalizeInternalLinks) {
-              (p as any)._finalizeInternalLinks(pageRefs);
-          }
+          p._finalizeInternalLinks(pageRefs);
       }
 
       // Handle Outlines (Bookmarks)
