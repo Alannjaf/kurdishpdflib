@@ -6,6 +6,10 @@ A powerful, zero-dependency Node.js library for high-quality PDF generation, spe
 
 *   **🚀 Zero Dependency**: Built from the ground up for maximum speed and portability.
 *   **🌍 Multi-Script Support**: Full HarfBuzz-powered text shaping for perfect Kurdish ligatures and RTL layout.
+*   **🔐 PDF Encryption**:
+    *   **AES-128 & RC4-128**: Modern encryption with legacy compatibility.
+    *   **Password Protection**: User password (to open) and owner password (for full access).
+    *   **Permission Controls**: Restrict printing, copying, modification, and more.
 *   **🏗️ UI-Style Layout Engine**:
     *   Responsive `vstack`, `hstack`, `zstack`, and `grid` containers.
     *   Flexbox-style distribution: `space-between`, `space-evenly`, and `center`.
@@ -39,9 +43,9 @@ const layout = new LayoutEngine(doc);
 
 layout.render({
     type: 'box',
-    options: { 
-        backgroundColor: '#f8f9fa', 
-        borderRadius: 15, 
+    options: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 15,
         padding: 30,
         borderColor: '#0d6efd',
         borderWidth: 2
@@ -55,6 +59,25 @@ layout.render({
         ]
     }
 }, 50, 750);
+```
+
+### Password Protection Example
+
+```typescript
+const doc = new KurdPDF({
+    fonts: { /* ... */ },
+    encryption: {
+        userPassword: 'secret123',      // Required to open
+        ownerPassword: 'admin456',      // Required for full access
+        algorithm: 'aes',               // 'aes' (recommended) or 'rc4'
+        permissions: {
+            print: true,
+            copy: false,                // Disable text copying
+            modify: false,              // Disable modification
+            annotate: true
+        }
+    }
+});
 ```
 
 ## 📜 License

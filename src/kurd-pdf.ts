@@ -1,4 +1,4 @@
-import { createDocument, type PDFDocument, type CreateDocumentOptions } from './document.js';
+import { createDocument, type PDFDocument, type CreateDocumentOptions, type EncryptionOptions, type PDFPermissions } from './document.js';
 import type { Page, ShapedGlyph } from './page.js';
 import { TextShaper, type Hb, type ShapedFont } from './shaper.js';
 import { writeFileSync } from 'fs';
@@ -11,7 +11,11 @@ export interface KurdPDFOptions {
     title?: string;
     author?: string;
     subject?: string;
+    /** Encryption options for password protection */
+    encryption?: EncryptionOptions;
 }
+
+export type { EncryptionOptions, PDFPermissions };
 
 export class KurdPDF {
     private doc: PDFDocument | null = null;
@@ -53,7 +57,8 @@ export class KurdPDF {
             fonts: this.fonts,
             title: this.options.title,
             author: this.options.author,
-            subject: this.options.subject
+            subject: this.options.subject,
+            encryption: this.options.encryption
         });
         
         // Start with one page automatically

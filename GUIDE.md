@@ -160,6 +160,96 @@ Render SVG path data as scalable vectors. Original colors from SVG classes (`cls
 
 ---
 
+## PDF Encryption
+
+Kurd-PDFLib supports robust PDF encryption with both **AES-128** (recommended) and **RC4-128** (legacy compatibility) algorithms.
+
+### Basic Password Protection
+
+```typescript
+const doc = new KurdPDF({
+    fonts: { /* ... */ },
+    encryption: {
+        userPassword: 'secret123',     // Required to open the document
+        ownerPassword: 'admin456',     // Required for full access (editing, removing restrictions)
+        algorithm: 'aes'               // 'aes' (default, recommended) or 'rc4'
+    }
+});
+```
+
+### Permission Restrictions
+
+You can create documents that open without a password but have restricted permissions:
+
+```typescript
+const doc = new KurdPDF({
+    fonts: { /* ... */ },
+    encryption: {
+        userPassword: '',              // Empty = opens without password
+        ownerPassword: 'owner-secret', // Password to remove restrictions
+        algorithm: 'aes',
+        permissions: {
+            print: false,              // Disable printing
+            copy: false,               // Disable text/image copying
+            modify: false,             // Disable document modification
+            annotate: true,            // Allow adding annotations
+            fillForms: true,           // Allow form field filling
+            extractForAccessibility: true,  // Allow accessibility extraction
+            assemble: false,           // Disable page assembly
+            highQualityPrint: false    // Disable high-quality printing
+        }
+    }
+});
+```
+
+### Encryption Options Reference
+
+| Option | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `userPassword` | `string` | `''` | Password required to open the document. Empty string = no password needed. |
+| `ownerPassword` | `string` | (userPassword) | Password for full access. If not set, uses userPassword. |
+| `algorithm` | `'aes' \| 'rc4'` | `'aes'` | Encryption algorithm. AES-128 is recommended for modern readers. |
+| `permissions` | `PDFPermissions` | (all allowed) | Object controlling document permissions. |
+
+### Permission Flags
+
+| Permission | Description |
+| :--- | :--- |
+| `print` | Allow printing the document |
+| `copy` | Allow copying text and images |
+| `modify` | Allow modifying document content |
+| `annotate` | Allow adding/editing annotations |
+| `fillForms` | Allow filling form fields |
+| `extractForAccessibility` | Allow text extraction for accessibility |
+| `assemble` | Allow inserting, rotating, or deleting pages |
+| `highQualityPrint` | Allow high-resolution printing |
+
+### Algorithm Comparison
+
+| Feature | AES-128 | RC4-128 |
+| :--- | :--- | :--- |
+| Security | High (modern standard) | Medium (legacy) |
+| PDF Version | 1.5+ | 1.4+ |
+| Compatibility | Most modern readers | Older PDF readers |
+| Recommendation | **Use this** | Only for legacy support |
+
+### Example: Kurdish Password
+
+You can use non-ASCII passwords, including Kurdish/Arabic text:
+
+```typescript
+const doc = new KurdPDF({
+    fonts: { /* ... */ },
+    encryption: {
+        userPassword: 'کوردستان',      // Kurdish password!
+        ownerPassword: 'ئەدمین',
+        algorithm: 'aes'
+    }
+});
+```
+
+---
+
 ## Advanced Usage
 
 ### True Transparency
