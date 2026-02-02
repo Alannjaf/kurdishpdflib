@@ -2,7 +2,7 @@
  * Comprehensive Demo: All Features of Kurd-PDFLib
  */
 
-import { KurdPDF, LayoutEngine } from '../dist/index.js';
+import { KurdPDF, LayoutEngine, PageSizes } from '../dist/index.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,9 +34,9 @@ async function generatePDF() {
     await pdf.init();
 
     // ============================================
-    // PAGE 1: Typography & Text Features
+    // PAGE 1: Typography & Text Features (A4 Portrait - default)
     // ============================================
-    pdf.addPage();
+    pdf.addPage({ size: 'A4' });
     pdf.addBookmark('Typography & Text', 0);
 
     // Title with gradient background
@@ -119,9 +119,9 @@ async function generatePDF() {
     pdf.text('CMYK Yellow', 235, y - 3, { font: 'F1', size: 10, color: '#333333' });
 
     // ============================================
-    // PAGE 2: Graphics & Shapes
+    // PAGE 2: Graphics & Shapes (Letter Landscape)
     // ============================================
-    pdf.addPage();
+    pdf.addPage({ size: 'Letter', orientation: 'landscape' });
     pdf.addBookmark('Graphics & Shapes', 1);
 
     // Title
