@@ -989,3 +989,68 @@ export function createPageFooter(options: HeaderFooterOptions): (page: number, t
 export function createPageHeader(options: HeaderFooterOptions): (page: number, total: number) => any {
     return createPageFooter(options); // Same implementation, different name for clarity
 }
+
+// ============================================
+// Unit Conversion Helpers
+// ============================================
+// PDF uses points as the base unit (1 point = 1/72 inch)
+
+/**
+ * Convert millimeters to PDF points
+ * @param value - Length in millimeters
+ * @returns Length in points
+ * @example
+ * pdf.addPage({ width: mm(210), height: mm(297) }); // A4 size
+ */
+export function mm(value: number): number {
+    return value * (72 / 25.4);
+}
+
+/**
+ * Convert centimeters to PDF points
+ * @param value - Length in centimeters
+ * @returns Length in points
+ * @example
+ * pdf.rect(cm(1), cm(1), cm(5), cm(2));
+ */
+export function cm(value: number): number {
+    return value * (72 / 2.54);
+}
+
+/**
+ * Convert inches to PDF points
+ * @param value - Length in inches
+ * @returns Length in points
+ * @example
+ * pdf.addPage({ width: inches(8.5), height: inches(11) }); // US Letter
+ */
+export function inches(value: number): number {
+    return value * 72;
+}
+
+/**
+ * Convert PDF points to millimeters
+ * @param value - Length in points
+ * @returns Length in millimeters
+ */
+export function toMm(value: number): number {
+    return value * (25.4 / 72);
+}
+
+/**
+ * Convert PDF points to centimeters
+ * @param value - Length in points
+ * @returns Length in centimeters
+ */
+export function toCm(value: number): number {
+    return value * (2.54 / 72);
+}
+
+/**
+ * Convert PDF points to inches
+ * @param value - Length in points
+ * @returns Length in inches
+ */
+export function toInches(value: number): number {
+    return value / 72;
+}

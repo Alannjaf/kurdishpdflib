@@ -4,7 +4,7 @@
  */
 
 export { createDocument } from './document.js';
-export { KurdPDF, PageSizes, createPageHeader, createPageFooter } from './kurd-pdf.js';
+export { KurdPDF, PageSizes, createPageHeader, createPageFooter, mm, cm, inches, toMm, toCm, toInches } from './kurd-pdf.js';
 export { LayoutEngine } from './layout.js';
 export type { PDFDocument, CreateDocumentOptions, EncryptionOptions, PDFPermissions } from './document.js';
 export type { PageSizeName, Orientation, PageOptions, HeaderFooterOptions } from './kurd-pdf.js';
