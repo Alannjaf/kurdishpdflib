@@ -6,7 +6,7 @@
 export { createDocument } from './document.js';
 export { KurdPDF } from './kurd-pdf.js';
 export { LayoutEngine } from './layout.js';
-export type { PDFDocument, CreateDocumentOptions } from './document.js';
+export type { PDFDocument, CreateDocumentOptions, EncryptionOptions, PDFPermissions } from './document.js';
 export type {
   Page,
   DrawTextOptions,

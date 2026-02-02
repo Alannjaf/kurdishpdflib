@@ -10,6 +10,13 @@ import { embedFont, type EmbeddedFont } from './ttf/embed.js';
 import { buildToUnicodeCMapFromGidPairs, encodeToUnicodeStream } from './encoding.js';
 import { parsePNG } from './png.js';
 import { deflateSync } from 'node:zlib';
+import {
+  initEncryption,
+  generateFileId,
+  type EncryptionOptions,
+  type PDFPermissions,
+  type EncryptionState
+} from './encryption.js';
 
 export interface FontConfig {
   fontBytes: Uint8Array;
@@ -27,7 +34,11 @@ export interface CreateDocumentOptions {
   title?: string;
   author?: string;
   subject?: string;
+  /** Encryption options */
+  encryption?: EncryptionOptions;
 }
+
+export type { EncryptionOptions, PDFPermissions };
 
 export interface PDFDocument {
   addPage(width: number, height: number): Page;
@@ -43,6 +54,16 @@ export interface PDFDocument {
 
 export function createDocument(opts: CreateDocumentOptions = {}): PDFDocument {
   const w = new PdfWriter();
+
+  // Generate file ID (needed for encryption and recommended for all PDFs)
+  const fileId = generateFileId();
+
+  // Initialize encryption if options provided
+  let encryptionState: EncryptionState | null = null;
+  if (opts.encryption) {
+    encryptionState = initEncryption(opts.encryption, fileId);
+    w.setEncryption(encryptionState, fileId);
+  }
 
   w.addDict({
     Type: name('Catalog'),
